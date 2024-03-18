@@ -85,8 +85,8 @@ def keep5min(requests,metas):
 
 
 if __name__=="__main__":
-    [requests,metas]=input.input(r"/home/wangyi/serverless/test_data")
-    # [requests,metas]=input.input(r"F:\python_file\serverless\dataSet_1")
+    # [requests,metas]=input.input(r"/home/wangyi/serverless/test_data")
+    [requests,metas]=input.input(r"F:\python_file\serverless\dataSet_1")
 
     [cold_start,waste_time,exe_time,response_fail]=keep5min(requests,metas)
 

@@ -7,13 +7,31 @@ import torch.nn as nn
 import numpy as np
 # import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
-
+import os
 from Platform import input, statistics
+from datetime import datetime
+import sys
 
+class Logger(object):
+    def __init__(self, filename='default.log', stream=sys.stdout):
+        self.terminal = stream
+        self.log = open(filename, 'a')
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+
+    def flush(self):
+        pass
 
 # 定义函数，从数据集里按照容器分类提取 时间和运行时间 序列 和 时间序列
 def get_time_sequences(requests, metas):
-    '''从数据集里按照容器分类 提取 时间和运行时间 序列 和 时间序列'''
+    '''从数据集里按照容器分类 提取 时间和运行时间 序列 和 时间序列
+    [
+        {key:[[starttime,durationsinms],...],...},
+        {key:[starttime,...],...}
+    ]
+    '''
     time_sequences = input.createdict(metas)
     sequences = input.createdict(metas)
 
@@ -64,58 +82,85 @@ output_size：输出中的项目数量，由于我们要预测未来1个月的�
         self.linear = nn.Linear(hidden_layer_size, output_size)
 
         self.hidden_cell = (torch.zeros(1, 1, self.hidden_layer_size),
-                            torch.zeros(1, 1, self.hidden_layer_size))
+                            torch.zeros(1, 1, self.hidden_layer_size))  # (num_layers * num_directions, batch_size, hidden_size)
 
     def forward(self, input_seq):
-        lstm_out, self.hidden_cell = self.lstm(
-            input_seq.view(len(input_seq), 1, -1), self.hidden_cell)
+        # LSTM 层期望的输入形状是 (seq_len, batch_size, input_size)
+        # lstm_out 是LSTM层的输出张量，其形状为 (seq_len, batch_size, hidden_size)
+        lstm_out, self.hidden_cell = self.lstm(input_seq.view(len(input_seq), 1, -1), self.hidden_cell)
+        # lstm_out形状转换为(seq_len, hidden_size * batch_size)
+        # predictions 的形状是 (seq_len, output_size)
         predictions = self.linear(lstm_out.view(len(input_seq), -1))
         return predictions[-1]
 
 
-# 训练模型，每隔25个迭代，损失将被打印
+# 训练模型，每轮的平均损失将被打印
+#TODO 按批次并行训练
 def training(epochs, train_inout_seq, model, optimizer):
+    
+    model = model.to(device)
+    model.train() # 设置为训练模式
     for i in range(epochs):
-        # todo
         loss_list = []
         for seq, labels in train_inout_seq:
+            seq, labels = seq.to(device), labels.to(device)
 
-            optimizer.zero_grad()
-            model.hidden_cell = (torch.zeros(1, 1, model.hidden_layer_size),
-                                 torch.zeros(1, 1, model.hidden_layer_size))
+            model.hidden_cell = (torch.zeros(
+                1, 1, model.hidden_layer_size).to(device),
+                                 torch.zeros(
+                                     1, 1, model.hidden_layer_size).to(device))
 
             y_pred = model(seq)
-
             single_loss = loss_function(y_pred, labels)
-            single_loss.backward()
+
+            optimizer.zero_grad() # 梯度清零，否则梯度会累加
+            single_loss.backward() #  是 PyTorch 中张量（Tensor）对象的方法，用于执行反向传播计算梯度
             optimizer.step()
+
             loss_list.append(single_loss.item())
         mean_loss = sum(loss_list) / len(loss_list)
-
-        if i % 25 == 1:
-            print(f'epoch: {i:3} loss: {mean_loss:10.8f}')
-    print(f'epoch: {i:3} loss: {mean_loss:10.10f}')
+        print(f'epoch: {i:3} loss: {mean_loss:10.8f}')
 
 # 做预测
 def prediction(test_inputs, fut_pred, train_window, model, test_sequences):
 
-    model.eval()
+    model.eval() # 设置为评估模式
     predict = []
 
     for i in range(fut_pred):
         seq = torch.FloatTensor(test_inputs[-train_window:])
-        with torch.no_grad():  # 是一个PyTorch的上下文管理器（context manager），它用于禁用梯度计算。
-            model.hidden = (torch.zeros(1, 1, model.hidden_layer_size),
-                            torch.zeros(1, 1, model.hidden_layer_size))
+        seq = seq.to(device)
+
+        with torch.no_grad():  # 是一个PyTorch的上下文管理器，它用于禁用梯度计算
+            model.hidden_cell = (torch.zeros(1, 1,
+                                        model.hidden_layer_size).to(device),
+                            torch.zeros(1, 1,
+                                        model.hidden_layer_size).to(device))
 
             test_inputs.append(test_sequences[i])
             predict.append(model(seq).item())
+    model.train() # 设置为训练模式
     return predict
 
 
 # 主程序，按流程执行
 if __name__ == "__main__":
-    print(torch.cuda.is_available())
+    # 将输出写入logger文件夹
+    # 获取当前时间
+    current_time = datetime.now()
+    # 格式化当前时间，生成文件名，例如：2024-02-28_14-30-00.txt
+    file_name = current_time.strftime("%Y-%m-%d_%H-%M-%S")
+
+    logger_url = os.path.dirname(os.path.realpath(__file__)) + '/logger/'
+    sys.stdout = Logger(f'{logger_url}{file_name}.log', sys.stdout)
+    sys.stderr = Logger(f'{logger_url}{file_name}.err', sys.stderr)
+
+    if torch.cuda.is_available():
+        device = torch.device("cuda:1")
+        print("GPU is available.")
+    else:
+        device = torch.device("cpu")
+        print("GPU is not available, using CPU.")
 
     train_window = 20
 
@@ -125,6 +170,7 @@ if __name__ == "__main__":
     #转换成浮点数
 
     # 划分训练集和测试集
+    #TODO
     test_data_size = int(len(requests) / 2)
 
     train_data = requests[:-test_data_size]
@@ -137,6 +183,7 @@ if __name__ == "__main__":
     #todo 有未使用的容器
     old_train_sequences = train_sequences.copy()
     for key in old_train_sequences:
+        #TODO
         if len(old_train_sequences[key]) <= train_window:
             del train_sequences[key]
 
@@ -160,7 +207,7 @@ if __name__ == "__main__":
         train_data_normalized[key] = scaler[key].fit_transform(
             np.array(train_sequences[key]).reshape(-1, 1))
         test_data_normalized[key] = scaler[key].transform(
-            np.array(train_sequences[key]).reshape(-1, 1))
+            np.array(test_sequences[key]).reshape(-1, 1))
 
         train_data_normalized[key] = torch.FloatTensor(
             train_data_normalized[key]).view(-1)
@@ -168,13 +215,22 @@ if __name__ == "__main__":
         # 格式转换并打标签
         train_inout_seq[key] = create_inout_sequences(
             train_data_normalized[key], train_window)
+        # print(key)
+        # print(type(train_inout_seq[key][0][0]),train_inout_seq[key][0][0].shape)
+
     print("数据预处理完成")
 
-    #todo 优化？？？
-    # 创建LSTM类的对象，定义丢失函数和优化器
+    #TODO 优化？？？多个模型并行训练
+    # 创建LSTM类的对象，定义损失函数和优化器
     model_dict = input.createdict(metas)
     optimizer_dict = input.createdict(metas)
-    loss_function = nn.MSELoss()
+    # 部分容器没有训练数据，删除对应模型
+    keys_ont_in_train_sequence = set(model_dict.keys()) - set(train_sequences.keys())
+    for key in keys_ont_in_train_sequence:
+        del model_dict[key]
+        del optimizer_dict[key]
+
+    loss_function = nn.MSELoss().to(device)
     for key in model_dict:
         model_dict[key] = LSTM()
 
@@ -182,15 +238,30 @@ if __name__ == "__main__":
                                                lr=0.001)
     print("LSTM模型初始化完成，开始训练")
 
-    # 训练模型
+    # 加载模型参数 或者 训练模型并保存模型
+    url = os.path.dirname(os.path.realpath(__file__)) + '/lstm_models/'
+    load_flag = 0
+
     for key in train_sequences:  #因为有未使用的容器，需要删除键值对，对应的模型不能也不需要训练
-        print(key, '容器预测模型开始训练')
-        epochs = 150
-        training(epochs, train_inout_seq[key], model_dict[key],
-                 optimizer_dict[key])
+        model_name = f'{key}_model_weights.pth'
+        path = url + model_name
+
+        if os.path.exists(path) and load_flag:
+            model_dict[key] = model_dict[key].to(device)
+            model_dict[key].load_state_dict(torch.load(path,
+                                            map_location=device))
+            print(key, '容器预测模型参数载入完成')
+
+        else:
+            print(key, '容器预测模型开始训练')
+            epochs = 500
+            training(epochs, train_inout_seq[key], model_dict[key],
+                     optimizer_dict[key])
+            torch.save(model_dict[key].state_dict(), path)  # 保存模型参数
 
     print("模型训练完成，开始预测")
 
+# TODO 单个训练单个预测？
     # 做预测
     predict_dict = input.createdict(metas)
     actual_predictions = input.createdict(metas)
@@ -198,7 +269,6 @@ if __name__ == "__main__":
         fut_pred = len(test_data_normalized[key])
         test_inputs = train_data_normalized[key][-train_window:].tolist()
         if key not in model_dict:
-            #todo
             pass
         else:
             predict_dict[key] = prediction(test_inputs, fut_pred, train_window,
@@ -209,32 +279,84 @@ if __name__ == "__main__":
         actual_predictions[key] = scaler[key].inverse_transform(
             np.array(predict_dict[key]).reshape(-1, 1))
     print("全部预测完成")
+    
+    # 预测误差
+    error = input.createdict(metas)
+    all_mean=0
+    all_result=[]
+    for key in test_sequences:  #因为有未使用的容器，需要删除键值对，对应的容器不需要预测
+        result = [y - x for x, y in zip(test_sequences[key],actual_predictions[key])]
+        mean = sum(abs(x) for x in result)/len(result)
+        error[key].append(mean)
+        error[key].append(result)
+
+        all_result.extend(result)
+    all_mean = sum(abs(x) for x in all_result)/len(all_result)
+    error['all']=[all_mean,all_result]
+    print('error[key]=[mean,error_list]')
+    print(error)
+
     # 记录数据 cold_start_predict,waste_time,exe_time
     cold_start_predict = input.createdict(metas)
     waste_time = input.createdict(metas)
     exe_time = input.createdict(metas)
+    advance_time = 5  # 预热的提前时间(冗余时间)，单位ms
 
-    # 计算 cold_start_predict={'key':[[start_time,prepare_time],...],...}
+    # cold_start_predict={'key':[[start_time,prepare_time],...],...}
     for key in test_data:
         init_time = 0
         for ele in metas:
-            if ele == key:
-                init_time = ele['init_time']
+            if ele[key] == key:
+                init_time = ele['initDurationInMs']
 
-        if key not in actual_predictions:
+        if key not in actual_predictions:  # 没有对应的预测模型的情况，全部冷启动
             for ele in test_data[key]:
                 cold_start_predict[key].append([ele[0], init_time])
-                exe_time[key].append([ele[0], ele[1]+init_time])
-
+                exe_time[key].append([ele[0], ele[1] + init_time])
+                # waste_time[key]
         else:
-            for ele in test_data[key]:
-                pass
+            i = 0
+            j = 0
+            while i < len(test_data[key]):
+                ele_real = test_data[key][i]
+                ele_predict = actual_predictions[key][j]
+                # 判断是否 非热启动
+                if ele_real[0] < ele_predict - advance_time:  # 非热启动
+                    # 判断是否正在预热
+                    if ele_predict - advance_time - init_time < ele_real[0]:
+                        cold_start_predict[key].append([
+                            ele_real[0],
+                            ele_predict - advance_time - ele_real[0]])
+                        exe_time[key].append([
+                            ele_real[0], ele_predict - advance_time -
+                            ele_real[0] + ele_real[1]])
+                        # waste_time[key].append()
+                        i = i + 1
+                        j = j + 1
 
+                    else:  #请求到来时还未开始预热
+                        cold_start_predict[key].append([ele_real[0], init_time])
+                        exe_time[key].append([ele_real[0],
+                                             init_time + ele_real[1]])
+                        # waste_time[key].append()
+                        i = i + 1
+                else:  # 热启动
+                    # cold_start_predict[key]
+                    exe_time[key].append([ele_real[0], ele_real[1]])
+                    waste_time[key].append([ele_real[0] - ele_predict +
+                                           advance_time])
+                    i = i + 1
+                    j = j + 1
 
     # 统计指标 cold_statistics,mem_statistics
-    cold_statistics = statistics.cold_start_statistics_predict(cold_start_predict, exe_time, metas)
+    cold_statistics = statistics.cold_start_statistics_predict(
+        cold_start_predict, exe_time, metas)
     mem_statistics = statistics.memory_statistics(waste_time, exe_time, metas)
 
-
-
+    print(
+        'cold_statistics[key]=[cold_num,all_num,frequency,cold_time,utilization]'
+    )
+    print(cold_start_predict)
+    print('mem_statistics[key]=[waste_mem,all_mem,utilization]')
+    print(mem_statistics)
 #统计指标  是否问题解决     监督学习指标  网络收敛   准  好

@@ -4,8 +4,13 @@
 '''
 指标统计：冷启动、资源利用、响应
 冷启动：每种容器的冷启动次数，总次数，冷启动频率，冷启动的时延，时间利用率
+<<<<<<< HEAD
 cold_start={'key':[start_time,...],...}
 exe_time={'key':[[start_time,use_time],...],...}
+=======
+cold_start={'key':[start_time,...],...}   cold_start_predict={'key':[[start_time,prepare_time],...],...}
+exe_time={'key':[[sys_use_time,request_use_time],...],...}
+>>>>>>> 6ce129897fefb15c37ff770c5a7283a5bc40f406
 metas=metas
 资源利用：每种容器的浪费资源，总使用资源，资源利用率
 waste_time{'key':[container_free_time,...],...}
@@ -57,6 +62,51 @@ def cold_start_statistics(cold_start,exe_time,metas):
     cold_statistics['all']=[all_cold_num,all_all_num,all_frequency,all_utilization]
     return cold_statistics
 
+<<<<<<< HEAD
+=======
+# 使用预测模式情况下 计算冷启动 输出一个字典，记录每种容器的冷启动次数，总次数，冷启动频率，冷启动的时延，时间利用率
+def cold_start_statistics_predict(cold_start_predict,exe_time,metas):
+    cold_statistics=input.createdict(metas)
+    all_cold_num = 0
+    all_all_num = 0
+    all_all_time = 0
+    all_cold_time = 0
+
+    for key in cold_start_predict:
+        cold_num=len(cold_start_predict[key])
+        all_num=len(exe_time[key])
+        all_time = 0
+        cold_time = 0
+        all_cold_num=all_cold_num+cold_num
+        all_all_num=all_all_num+all_num
+
+        if all_num == 0:
+            frequency = 0
+        else:
+            frequency = cold_num/all_num
+
+        # 修改了冷启动时延的计算方式，有部分冷启动时延不是完全init_time
+        for row in cold_start_predict[key]:
+            cold_time = cold_time + row[1]
+
+        for row in exe_time[key]:
+            all_time = all_time+row[1]
+
+        if all_time == 0:
+            utilization = 0
+        else:
+            utilization=1-cold_time/all_time
+        cold_statistics[key]=[cold_num,all_num,frequency,cold_time,utilization]
+
+        all_all_time=all_all_time+all_time
+        all_cold_time=all_cold_time+cold_time
+
+    all_frequency = all_cold_num/all_all_num
+    all_utilization = 1-all_cold_time/all_all_time
+    cold_statistics['all']=[all_cold_num,all_all_num,all_frequency,all_utilization]
+    return cold_statistics
+
+>>>>>>> 6ce129897fefb15c37ff770c5a7283a5bc40f406
 # 记录资源利用，输出一个字典，记录每种容器的浪费资源，总使用资源，资源利用率
 def memory_statistics(waste_time,exe_time,metas):
     mem_statistics=input.createdict(metas)
@@ -68,8 +118,12 @@ def memory_statistics(waste_time,exe_time,metas):
 
         all_time = 0
         for row in exe_time[key]:
+<<<<<<< HEAD
             all_time = all_time+row[1]
         all_time=all_time+waste
+=======
+            all_time = all_time+row[0]
+>>>>>>> 6ce129897fefb15c37ff770c5a7283a5bc40f406
 
         key_memory = 0
         for ele in metas:
