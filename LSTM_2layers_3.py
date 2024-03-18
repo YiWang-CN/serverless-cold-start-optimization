@@ -86,8 +86,8 @@ output_size：由于我们要预测未来1个时间步的到达时刻，因此�
         # self.lstm1 = nn.LSTM(input_size, hidden_size1, batch_first=True)
         # self.lstm2 = nn.LSTM(hidden_size1, hidden_size2, batch_first=True)
 
-        self.linear1 = nn.Linear(self.hidden_size*self.num_layers, self.hidden_size/2)
-        self.linear2 = nn.Linear(self.hidden_size/2, output_size)
+        self.linear1 = nn.Linear(int(self.hidden_size*self.num_layers), int(self.hidden_size/2))
+        self.linear2 = nn.Linear(int(self.hidden_size/2), output_size)
 
         self.hidden_cell = self.init_hidden(self.batch_size)
 
@@ -216,8 +216,8 @@ if __name__ == "__main__":
     key = 'roles1'
     # key = 'roles2'
     # key = '8371b8baba81aac1ca237e492d7af0d851b4d141'
-    batch_size = 128
-    epochs = 500
+    batch_size = 256
+    epochs = 2000
     lr = 0.0001
     epoch_vision = 'v20'
     model_url = os.path.dirname(os.path.realpath(__file__)) + '/lstm_models/' + dataset_name +'/layer2_'+ key +'/'
