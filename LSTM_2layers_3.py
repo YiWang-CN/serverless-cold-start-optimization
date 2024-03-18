@@ -205,7 +205,7 @@ def predict(test_input, train_window, model, batch_size=1):
 # 主程序，按流程执行
 if __name__ == "__main__":
     if torch.cuda.is_available():
-        device = torch.device("cuda:1")
+        device = torch.device("cuda:0")
         print("GPU is available.")
     else:
         device = torch.device("cpu")
