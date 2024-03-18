@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding:utf-8 -*-
 
-'''基于diff的代码，调整网络结构，增加模型复杂度，降低偏差，减小loss至1e-5'''
+'''基于diff的代码，调整网络结构，增加模型复杂度，两层LSTM堆叠，128隐藏层单元，两个全连接层，降低偏差，减小loss至1e-5'''
 
 import torch
 import torch.nn as nn
@@ -75,40 +75,41 @@ class LSTM(nn.Module):
 hidden_size：指定隐藏层的数量以及每层中神经元的数量。我们将有2个隐藏层，分别为128个和64个神经元。
 output_size：由于我们要预测未来1个时间步的到达时刻，因此输出大小将为1。'''
 
-    def __init__(self, input_size=1, hidden_size1=128,hidden_size2=64, output_size=1,batch_size=1):
+    def __init__(self, input_size=1, hidden_size=128, output_size=1, num_layers = 2,batch_size=1):
         super().__init__()
-        self.hidden_size1 = hidden_size1
-        self.hidden_size2 = hidden_size2
-        self.num_layers = 1
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
         self.num_directions = 1
         self.batch_size = batch_size
 
-        # self.lstm = nn.LSTM(input_size, hidden_layer_size, batch_first=True) 
-        self.lstm1 = nn.LSTM(input_size, hidden_size1, batch_first=True)
-        self.lstm2 = nn.LSTM(hidden_size1, hidden_size2, batch_first=True)
+        self.lstm = nn.LSTM(input_size, self.hidden_size, num_layers = self.num_layers, batch_first=True) 
+        # self.lstm1 = nn.LSTM(input_size, hidden_size1, batch_first=True)
+        # self.lstm2 = nn.LSTM(hidden_size1, hidden_size2, batch_first=True)
 
-        self.linear = nn.Linear(hidden_size2, output_size)
-        # self.linear = nn.Linear(hidden_layer_size, output_size)
+        self.linear1 = nn.Linear(self.hidden_size*self.num_layers, self.hidden_size/2)
+        self.linear2 = nn.Linear(self.hidden_size/2, output_size)
 
-        self.hidden_cell1, self.hidden_cell2  = self.init_hidden(self.batch_size)
+        self.hidden_cell = self.init_hidden(self.batch_size)
 
         # (num_layers * num_directions, batch_size, hidden_size)
     def init_hidden(self,batch_size):
         # (h_0, c_0)
-        return  (torch.zeros(self.num_layers * self.num_directions, batch_size, self.hidden_size1).to(device),
-                torch.zeros(self.num_layers * self.num_directions, batch_size, self.hidden_size1).to(device)),(torch.zeros(self.num_layers * self.num_directions, batch_size, self.hidden_size2).to(device),
-                torch.zeros(self.num_layers * self.num_directions, batch_size, self.hidden_size2).to(device))
+        return  (torch.zeros(self.num_layers * self.num_directions, batch_size, self.hidden_size).to(device),
+                torch.zeros(self.num_layers * self.num_directions, batch_size, self.hidden_size).to(device))
 
     def forward(self, input_seq):
         # LSTM 层期望的输入形状是 (batch_size, seq_len, input_size)/
         # lstm_out 是LSTM层的输出张量，其形状为 ( batch_size, seq_len, hidden_size)
-        out_1, self.hidden_cell1 = self.lstm1(input_seq, self.hidden_cell1)
-        out_2, self.hidden_cell2 = self.lstm2(out_1, self.hidden_cell2)
+        out, self.hidden_cell = self.lstm(input_seq, self.hidden_cell)
 
-        h,c = self.hidden_cell2
-        # h形状转换为(batch_size, hidden_layer_size )
+        h,c = self.hidden_cell
+        # (num_layers * num_directions, batch_size, hidden_size)
+        # h形状转换为(batch_size, hidden_size * num_layers )  使用两层的隐藏状态来预测
+        h_n = torch.cat([h[i] for i in range(h.size(0))], dim=1)
+
         # predictions 的形状是 (batch_size, output_size)
-        predictions = self.linear(h.view(-1, self.hidden_size2))
+        linear1_out = self.linear1(h_n)
+        predictions =self.linear2(linear1_out)
 
         return predictions
 
@@ -131,7 +132,7 @@ def training(epochs, train_inout_seq, val_inout_seq, model, optimizer,batch_size
             labels = torch.stack([data[1].to(device) for data in batch_data])
             # print(labels.shape)
 
-            model.hidden_cell1,model.hidden_cell2 =  model.init_hidden(batch_size)
+            model.hidden_cell =  model.init_hidden(batch_size)
 
             y_pred = model(seq)
             single_loss = loss_function(y_pred, labels) #标量值
@@ -153,7 +154,7 @@ def training(epochs, train_inout_seq, val_inout_seq, model, optimizer,batch_size
                 seq = torch.stack([data[0].to(device) for data in batch_data]).unsqueeze(-1)
                 labels = torch.stack([data[1].to(device) for data in batch_data])
 
-                model.hidden_cell1,model.hidden_cell2 =  model.init_hidden(batch_size)
+                model.hidden_cell =  model.init_hidden(batch_size)
                 y_pred = model(seq)
                 single_loss = loss_function(y_pred, labels)
                 val_loss_list.append(single_loss.item())
@@ -193,7 +194,7 @@ def predict(test_input, train_window, model, batch_size=1):
     with torch.no_grad():  # 是一个PyTorch的上下文管理器，它用于禁用梯度计算
         for seq in test_input_seq:
             seq = seq.to(device)
-            model.hidden_cell1,model.hidden_cell2 =  model.init_hidden(batch_size)
+            model.hidden_cell =  model.init_hidden(batch_size)
             predictions.append(model(seq).item())
     y_pred = torch.FloatTensor(predictions)
     labels = test_input[train_window:].view(-1)
