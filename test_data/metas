@@ -1,0 +1,6 @@
+{"key": "nodes1", "runtime": "go", "timeoutInSecs": 1, "memoryInMb": 512, "initDurationInMs": 49}
+{"key": "roles1", "runtime": "go", "timeoutInSecs": 1, "memoryInMb": 256, "initDurationInMs": 56}
+{"key": "rolebindings1", "runtime": "go", "timeoutInSecs": 491, "memoryInMb": 256, "initDurationInMs": 13}
+{"key": "certificatesigningrequests1", "runtime": "go", "timeoutInSecs": 541, "memoryInMb": 256, "initDurationInMs": 20}
+{"key": "binding1", "runtime": "go", "timeoutInSecs": 885, "memoryInMb": 256, "initDurationInMs": 48}
+{"key": "csinodes1", "runtime": "go", "timeoutInSecs": 366, "memoryInMb": 512, "initDurationInMs": 28}
