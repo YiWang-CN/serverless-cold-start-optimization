@@ -155,8 +155,9 @@ def training(epochs, train_inout_seq, val_inout_seq, model, optimizer,batch_size
         val_mean_loss = sum(val_loss_list) / len(val_loss_list)
         val_loss.append(val_mean_loss)
 
-        # 每20轮或最后一轮 保存模型参数和画损失函数
-        if i%20 == 0 or i == epochs-1:
+        print(f'epoch: {i:3} loss: {mean_loss:10.8f}  val_loss: {val_mean_loss:10.8f}')
+        # 每10轮或最后一轮 保存模型参数和画损失函数
+        if i%10 == 0 or i == epochs-1:
             save_path = model_url + f'v{i}/'
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
@@ -168,7 +169,7 @@ def training(epochs, train_inout_seq, val_inout_seq, model, optimizer,batch_size
 
             torch.save(model.state_dict(), save_path + 'model_weights.pth')  # 保存模型参数
             plot_loss(epoch_loss, val_loss, save_path + 'loss.png') #绘制损失函数
-            print(f'epoch: {i:3} loss: {mean_loss:10.8f}')
+            # print(f'epoch: {i:3} loss: {mean_loss:10.8f}')
 
 # 定义函数，做预测
 def predict(test_input, train_window, model, batch_size=1):
@@ -204,16 +205,16 @@ if __name__ == "__main__":
         device = torch.device("cpu")
         print("GPU is not available, using CPU.")
 
-    train_window = 70
-    dataset_name = 'dataSet_2'
+    train_window = 20
+    dataset_name = 'dataSet_3'
     # key = 'roles1'
-    key = 'roles2'
-    # key = '8371b8baba81aac1ca237e492d7af0d851b4d141'
+    # key = 'roles2'
+    key = '8371b8baba81aac1ca237e492d7af0d851b4d141'
     batch_size = 128
     epochs = 500
     lr = 0.0001
     epoch_vision = 'v20'
-    model_url = os.path.dirname(os.path.realpath(__file__)) + '/lstm_models/' + dataset_name +'/diff_70_'+ key +'/'
+    model_url = os.path.dirname(os.path.realpath(__file__)) + '/lstm_models/' + dataset_name +'/diff_'+ key +'/'
     if not os.path.exists(model_url):
         os.makedirs(model_url)
 
@@ -223,7 +224,7 @@ if __name__ == "__main__":
         if ele['key'] == key:
             init_time = ele['initDurationInMs']
 
-    advance_time = init_time*3/2  # 提前预热的时间，单位ms
+    advance_time = init_time  # 提前预热的时间，单位ms
 
     # 数据做差分
     sequence = sequences[key]
@@ -284,6 +285,8 @@ if __name__ == "__main__":
 
     # 归一化值转换为实际时间间隔值
     diff_predictions = scaler.inverse_transform(np.array(diff_predictions).reshape(-1, 1)).reshape(-1).tolist()
+    # 实际时间间隔值应该>=0(这里把间隔值小于初始化时间的设置为初始化时间，意味着立即预热)
+    diff_predictions = [ele if ele >= init_time else init_time for ele in diff_predictions]
     # 根据实际时间间隔值，计算实际预测到达时刻
     last_arrival_time=sequence[-len(diff_predictions)-1:-2]
     predictions = [x + y for x, y in zip(last_arrival_time, diff_predictions)]
@@ -304,6 +307,18 @@ if __name__ == "__main__":
     plt.ylabel('Time of arrival(ms)')
     plt.title(key + ' container arrival time series')
     fig.savefig(figure_url + key + "_predicted_arrival_sequence.png")
+
+    fig = plt.figure(figsize=(15, 10))
+    # plt.plot(range(len(sequence)), sequence)
+    # 绘制第一条曲线
+    plt.plot(range(len(diff_sequence)-len(diff_predictions),len(diff_sequence)), diff_sequence[len(diff_sequence)-len(diff_predictions):], label='actual arrival time interval', color='blue')
+    # 绘制第二条曲线
+    plt.plot(range(len(diff_sequence)-len(diff_predictions),len(diff_sequence)), diff_predictions, label='predicted arrival time interval', color='red')
+    plt.legend()
+    plt.xlabel('Arrival order')
+    plt.ylabel('arrival time interval(ms)')
+    plt.title(key + ' Container arrival time interval sequence')
+    fig.savefig(figure_url + key + "_predicted_diff_sequence.png")
 
     # 预测误差
     error = []
@@ -337,7 +352,7 @@ if __name__ == "__main__":
         if ele_real[0] < ele_predict - advance_time:  # 非热启动
             # 判断是否正在预热
             if ele_predict - advance_time - init_time < ele_real[0]:
-                cold_start_predict[key].append([ele_real[0],ele_predict - advance_time + init_time - ele_real[0]])
+                cold_start_predict[key].append([ele_real[0],ele_predict - advance_time - ele_real[0]])
                 exe_time[key].append([init_time + ele_real[1], ele_predict - advance_time -ele_real[0] + ele_real[1]])
                 # waste_time[key].append()
                 i = i + 1
@@ -351,8 +366,8 @@ if __name__ == "__main__":
                 j = j + 1
         else:  # 热启动
             # cold_start_predict[key]
-            exe_time[key].append([ele_real[0] - ele_predict + advance_time, ele_real[1]])
-            waste_time[key].append(ele_real[0] - ele_predict + advance_time - init_time)
+            exe_time[key].append([ele_real[0] - ele_predict + advance_time + init_time + ele_real[1], ele_real[1]])
+            waste_time[key].append(ele_real[0] - ele_predict + advance_time)
             i = i + 1
             j = j + 1
 

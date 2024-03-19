@@ -68,7 +68,6 @@ def plot_loss(train_loss, val_loss, save_path):
     fig.savefig(save_path)
     plt.close()
 
-
 # 创建LSTM模型类
 class LSTM(nn.Module):
     '''input_size：对应于输入中的特征数量。虽然我们的序列长度是 tw（20），但每个时间不我们只有 1 个值，即到达时刻，因此输入大小将为 1。
@@ -162,8 +161,9 @@ def training(epochs, train_inout_seq, val_inout_seq, model, optimizer,batch_size
         val_mean_loss = sum(val_loss_list) / len(val_loss_list)
         val_loss.append(val_mean_loss)
 
-        # 每20轮或最后一轮 保存模型参数和画损失函数
-        if i%20 == 0 or i == epochs-1:
+        print(f'epoch: {i:3} loss: {mean_loss:10.8f}  val_loss: {val_mean_loss:10.8f}')
+        # 每10轮或最后一轮 保存模型参数和画损失函数
+        if i%10 == 0 or i == epochs-1:
             save_path = model_url + f'v{i}/'
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
@@ -175,7 +175,7 @@ def training(epochs, train_inout_seq, val_inout_seq, model, optimizer,batch_size
 
             torch.save(model.state_dict(), save_path + 'model_weights.pth')  # 保存模型参数
             plot_loss(epoch_loss, val_loss, save_path + 'loss.png') #绘制损失函数
-            print(f'epoch: {i:3} loss: {mean_loss:10.8f}')
+            # print(f'epoch: {i:3} loss: {mean_loss:10.8f}')
 
 # 定义函数，做预测
 def predict(test_input, train_window, model, batch_size=1):
@@ -205,22 +205,22 @@ def predict(test_input, train_window, model, batch_size=1):
 # 主程序，按流程执行
 if __name__ == "__main__":
     if torch.cuda.is_available():
-        device = torch.device("cuda:0")
+        device = torch.device("cuda:1")
         print("GPU is available.")
     else:
         device = torch.device("cpu")
         print("GPU is not available, using CPU.")
 
     train_window = 50
-    dataset_name = 'dataSet_1'
-    key = 'roles1'
-    # key = 'roles2'
+    dataset_name = 'dataSet_2'
+    # key = 'roles1'
+    key = 'roles2'
     # key = '8371b8baba81aac1ca237e492d7af0d851b4d141'
     batch_size = 256
-    epochs = 2000
+    epochs = 500
     lr = 0.0001
-    epoch_vision = 'v20'
-    model_url = os.path.dirname(os.path.realpath(__file__)) + '/lstm_models/' + dataset_name +'/layer2_'+ key +'/'
+    epoch_vision = 'v10'
+    model_url = os.path.dirname(os.path.realpath(__file__)) + '/lstm_models/' + dataset_name +'/l2_'+ key +'/'
     if not os.path.exists(model_url):
         os.makedirs(model_url)
 
@@ -230,7 +230,7 @@ if __name__ == "__main__":
         if ele['key'] == key:
             init_time = ele['initDurationInMs']
 
-    advance_time = init_time  # 提前预热的时间，单位ms
+    advance_time = 0  # 比预热时刻还要提前的时间，单位ms
 
     # 数据做差分
     sequence = sequences[key]
@@ -268,106 +268,120 @@ if __name__ == "__main__":
 
     # 创建LSTM类的对象，定义损失函数和优化器
     model = LSTM(batch_size=batch_size)
-    optimizer = torch.optim.Adam(model.parameters(),lr = lr)
+    optimizer = torch.optim.Adam(model.parameters(),lr = lr,weight_decay=0.0001)
     loss_function = nn.MSELoss().to(device)
     print("LSTM模型初始化完成，开始训练")
 
-    # 训练模型并保存模型
-    print(key, '容器预测模型开始训练')
-    training(epochs, train_inout_seq, val_inout_seq, model,optimizer,batch_size,model_url)
+    # # 训练模型并保存模型
+    # print(key, '容器预测模型开始训练')
+    # training(epochs, train_inout_seq, val_inout_seq, model,optimizer,batch_size,model_url)
 
-    # # 加载模型
-    # weights_file = model_url + epoch_vision + '/model_weights.pth'
-    # if os.path.exists(weights_file):
-    #     model = model.to(device)
-    #     model.load_state_dict(torch.load(weights_file,map_location=device))
-    #     print(key, '容器预测模型参数载入完成')
-    # else:
-    #     print('该模型权重文件不存在')
+    # 加载模型
+    weights_file = model_url + epoch_vision + '/model_weights.pth'
+    if os.path.exists(weights_file):
+        model = model.to(device)
+        model.load_state_dict(torch.load(weights_file,map_location=device))
+        print(key, '容器预测模型参数载入完成')
+    else:
+        print('该模型权重文件不存在')
     
-    # # 预测
-    # mean_loss, diff_predictions = predict(test_input, train_window, model, batch_size=1)
-    # print('mean_loss = ', mean_loss)
+    # 预测
+    mean_loss, diff_predictions = predict(test_input, train_window, model, batch_size=1)
+    print('mean_loss = ', mean_loss)
 
-    # # 归一化值转换为实际时间间隔值
-    # diff_predictions = scaler.inverse_transform(np.array(diff_predictions).reshape(-1, 1)).reshape(-1).tolist()
-    # # 根据实际时间间隔值，计算实际预测到达时刻
-    # last_arrival_time=sequence[-len(diff_predictions)-1:-2]
-    # predictions = [x + y for x, y in zip(last_arrival_time, diff_predictions)]
-    # # 真实的到达时刻
-    # actual_value = sequence[-len(predictions):]
+    # 归一化值转换为实际时间间隔值
+    diff_predictions = scaler.inverse_transform(np.array(diff_predictions).reshape(-1, 1)).reshape(-1).tolist()
+    # 实际时间间隔值应该>=0(这里把间隔值小于初始化时间的设置为初始化时间，意味着立即预热)
+    diff_predictions = [ele if ele >= init_time else init_time for ele in diff_predictions]
+    # 根据实际时间间隔值，计算实际预测到达时刻
+    last_arrival_time=sequence[-len(diff_predictions)-1:-2]
+    predictions = [x + y for x, y in zip(last_arrival_time, diff_predictions)]
+    # 真实的到达时刻
+    actual_value = sequence[-len(predictions):]
 
-    # print("预测完成")
+    print("预测完成")
 
-    # figure_url = model_url + epoch_vision +'/'
-    # fig = plt.figure(figsize=(15, 10))
-    # # plt.plot(range(len(sequence)), sequence)
-    # # 绘制第一条曲线
-    # plt.plot(range(len(sequence)-len(predictions),len(sequence)), sequence[len(sequence)-len(predictions):], label='actual arrival sequence', color='blue')
-    # # 绘制第二条曲线
-    # plt.plot(range(len(sequence)-len(predictions),len(sequence)), predictions, label='predicted arrival sequence', color='red')
-    # plt.legend()
-    # plt.xlabel('Arrival order')
-    # plt.ylabel('Time of arrival(ms)')
-    # plt.title(key + ' container arrival time series')
-    # fig.savefig(figure_url + key + "_predicted_arrival_sequence.png")
+    figure_url = model_url + epoch_vision +'/'
+    fig = plt.figure(figsize=(15, 10))
+    # plt.plot(range(len(sequence)), sequence)
+    # 绘制第一条曲线
+    plt.plot(range(len(sequence)-len(predictions),len(sequence)), sequence[len(sequence)-len(predictions):], label='actual arrival sequence', color='blue')
+    # 绘制第二条曲线
+    plt.plot(range(len(sequence)-len(predictions),len(sequence)), predictions, label='predicted arrival sequence', color='red')
+    plt.legend()
+    plt.xlabel('Arrival order')
+    plt.ylabel('Time of arrival(ms)')
+    plt.title(key + ' container arrival time series')
+    fig.savefig(figure_url + key + "_predicted_arrival_sequence.png")
 
-    # # 预测误差
-    # error = []
-    # error_list = []
-    # mean=0
-    # error_list = [y - x for x, y in zip(actual_value,predictions)]
-    # mean = sum(abs(x) for x in error_list)/len(error_list)
-    # error.append(mean)
-    # error.append(error_list)
-    # # print('error = [mean, error_list]')
-    # print('error =', error[0])
+    fig = plt.figure(figsize=(15, 10))
+    # plt.plot(range(len(sequence)), sequence)
+    # 绘制第一条曲线
+    plt.plot(range(len(diff_sequence)-len(diff_predictions),len(diff_sequence)), diff_sequence[len(diff_sequence)-len(diff_predictions):], label='actual arrival time interval', color='blue')
+    # 绘制第二条曲线
+    plt.plot(range(len(diff_sequence)-len(diff_predictions),len(diff_sequence)), diff_predictions, label='predicted arrival time interval', color='red')
+    plt.legend()
+    plt.xlabel('Arrival order')
+    plt.ylabel('arrival time interval(ms)')
+    plt.title(key + ' Container arrival time interval sequence')
+    fig.savefig(figure_url + key + "_predicted_diff_sequence.png")
 
-    # # 记录数据 cold_start_predict,waste_time,exe_time
-    # cold_start_predict={}
-    # waste_time={}
-    # exe_time={}
-    # cold_start_predict[key] = []  # [[start_time,prepare_time],...]
-    # waste_time[key] = []  # 提前初始化后，等待的时间
-    # exe_time[key] = []  # [[sys_use_time,request_use_time],...]
+    # 预测误差
+    error = []
+    error_list = []
+    mean=0
+    error_list = [y - x for x, y in zip(actual_value,predictions)]
+    mean = sum(abs(x) for x in error_list)/len(error_list)
+    error.append(mean)
+    error.append(error_list)
+    # print('error = [mean, error_list]')
+    print('error =', error[0])
 
-    # # cold_start_predict={'key':[[start_time,prepare_time],...],...}
+    # 记录数据 cold_start_predict,waste_time,exe_time
+    cold_start_predict={}
+    waste_time={}
+    exe_time={}
+    cold_start_predict[key] = []  # [[start_time,prepare_time],...]
+    waste_time[key] = []  # 提前初始化后，等待的时间
+    exe_time[key] = []  # [[sys_use_time,request_use_time],...]
 
-    # time_sequence = time_sequences[key]
-    # actual_time_sequence = time_sequence[-len(predictions):]
-    # i = 0
-    # j = 0
-    # while i < len(actual_time_sequence):
-    #     ele_real = actual_time_sequence[i]
-    #     ele_predict = predictions[j]
-    #     # 判断是否 非热启动
-    #     if ele_real[0] < ele_predict - advance_time:  # 非热启动
-    #         # 判断是否正在预热
-    #         if ele_predict - advance_time - init_time < ele_real[0]:
-    #             cold_start_predict[key].append([ele_real[0],ele_predict - advance_time + init_time - ele_real[0]])
-    #             exe_time[key].append([init_time + ele_real[1], ele_predict - advance_time -ele_real[0] + ele_real[1]])
-    #             # waste_time[key].append()
-    #             i = i + 1
-    #             j = j + 1
+    # cold_start_predict={'key':[[start_time,prepare_time],...],...}
 
-    #         else:  #请求到来时还未开始预热
-    #             cold_start_predict[key].append([ele_real[0], init_time])
-    #             exe_time[key].append([init_time + ele_real[1], init_time + ele_real[1]])
-    #             # waste_time[key].append()
-    #             i = i + 1
-    #             j = j + 1
-    #     else:  # 热启动
-    #         # cold_start_predict[key]
-    #         exe_time[key].append([ele_real[0] - ele_predict + advance_time, ele_real[1]])
-    #         waste_time[key].append(ele_real[0] - ele_predict + advance_time - init_time)
-    #         i = i + 1
-    #         j = j + 1
+    time_sequence = time_sequences[key]
+    actual_time_sequence = time_sequence[-len(predictions):]
+    i = 0
+    j = 0
+    while i < len(actual_time_sequence):
+        ele_real = actual_time_sequence[i]
+        ele_predict = predictions[j]
+        # 判断是否 非热启动
+        if ele_real[0] < ele_predict - advance_time:  # 非热启动
+            # 判断是否正在预热
+            if ele_predict - advance_time - init_time < ele_real[0]:
+                cold_start_predict[key].append([ele_real[0],ele_predict - advance_time - ele_real[0]]) # xg
+                exe_time[key].append([init_time + ele_real[1], ele_predict - advance_time -ele_real[0] + ele_real[1]])
+                # waste_time[key].append()
+                i = i + 1
+                j = j + 1
 
-    # # 统计指标 cold_statistics,mem_statistics
-    # cold_statistics = statistics.cold_start_statistics_predict(cold_start_predict, exe_time, metas)
-    # mem_statistics = statistics.memory_statistics(waste_time, exe_time, metas)
+            else:  #请求到来时还未开始预热
+                cold_start_predict[key].append([ele_real[0], init_time])
+                exe_time[key].append([init_time + ele_real[1], init_time + ele_real[1]])
+                # waste_time[key].append()
+                i = i + 1
+                j = j + 1
+        else:  # 热启动
+            # cold_start_predict[key]
+            exe_time[key].append([ele_real[0] - ele_predict + advance_time + init_time + ele_real[1], ele_real[1]]) # xg
+            waste_time[key].append(ele_real[0] - ele_predict + advance_time) # xg
+            i = i + 1
+            j = j + 1
 
-    # print('cold_statistics[key]=[cold_num,all_num,frequency,cold_time,utilization]')
-    # print(cold_statistics)
-    # print('mem_statistics[key]=[waste_mem,all_mem,utilization]')
-    # print(mem_statistics)
+    # 统计指标 cold_statistics,mem_statistics
+    cold_statistics = statistics.cold_start_statistics_predict(cold_start_predict, exe_time, metas)
+    mem_statistics = statistics.memory_statistics(waste_time, exe_time, metas)
+
+    print('cold_statistics[key]=[cold_num,all_num,frequency,cold_time,utilization]')
+    print(cold_statistics)
+    print('mem_statistics[key]=[waste_mem,all_mem,utilization]')
+    print(mem_statistics)
