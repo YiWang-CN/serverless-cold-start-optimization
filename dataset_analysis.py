@@ -43,7 +43,7 @@ for key in sequences:
         # total_data_number = len(sequence)
         # plt.text(1, 0.5, f'Total number of container requests: {total_data_number}', fontsize=20, color='red')
         fig.savefig(figure_url + key + "_arrival_sequence.png")
-        
+        plt.close()
 
         fig = plt.figure(figsize=(15, 10))
         plt.hist(diff_sequence, bins=30)  # 设置30个bins，可以根据实际情况调整
