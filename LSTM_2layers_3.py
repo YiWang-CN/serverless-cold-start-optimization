@@ -212,15 +212,16 @@ if __name__ == "__main__":
         print("GPU is not available, using CPU.")
 
     train_window = 50
-    dataset_name = 'dataSet_2'
+    dataset_name = 'dataSet_3'
     # key = 'roles1'
-    key = 'roles2'
-    # key = '8371b8baba81aac1ca237e492d7af0d851b4d141'
+    # key = 'roles2'
+    key = '8371b8baba81aac1ca237e492d7af0d851b4d141'
     batch_size = 256
     epochs = 500
     lr = 0.0001
-    epoch_vision = 'v10'
-    model_url = os.path.dirname(os.path.realpath(__file__)) + '/lstm_models/' + dataset_name +'/layer2_'+ key +'/'
+    epoch_vision = 'v20'
+    model_directory_name = 'l2_'+ key
+    model_url = os.path.dirname(os.path.realpath(__file__)) + '/lstm_models/' + dataset_name +'/'+model_directory_name +'/'
     if not os.path.exists(model_url):
         os.makedirs(model_url)
 
@@ -326,28 +327,49 @@ if __name__ == "__main__":
     # plt.title(key + ' Container arrival time interval sequence')
     # fig.savefig(figure_url + key + "_predicted_diff_sequence.png")
 
+    # # 预测的时间间隔图像，500个数据一个图形
+    # predict_figure_url = os.path.dirname(os.path.realpath(__file__))+'/predict_figure/' +dataset_name+'/' +key+'/' +f'2layer_tw={train_window}_' + epoch_vision +'/' 
+    # if not os.path.exists(predict_figure_url):
+    #     os.makedirs(predict_figure_url)
 
-    predict_figure_url = os.path.dirname(os.path.realpath(__file__))+'/predict_figure/' +dataset_name+'/' +key+'/' +f'2layer_tw={train_window}_' + epoch_vision +'/' 
-    if not os.path.exists(predict_figure_url):
-        os.makedirs(predict_figure_url)
+    # num_plots = len(diff_predictions)
+    # num_plots_per_figure = 500
 
-    num_plots = len(diff_predictions)
+    # for i in range(0, num_plots, num_plots_per_figure):
+    #     start_index = i
+    #     end_index = min(i + num_plots_per_figure, len(diff_predictions))
+        
+    #     fig = plt.figure(figsize=(15, 10))
+    #     plt.plot(range(start_index, end_index), diff_sequence[start_index:end_index], label='actual arrival time interval', color='blue')
+    #     plt.plot(range(start_index, end_index), diff_predictions[start_index:end_index], label='predicted arrival time interval', color='red')
+    #     plt.legend()
+    #     plt.xlabel('Arrival order')
+    #     plt.ylabel('arrival time interval(ms)')
+    #     plt.title(key + f'Container arrival time interval sequence (Plots {i+1}-{i+num_plots_per_figure})')
+    #     fig.savefig(predict_figure_url + key + f"_predicted_diff_sequence_{i+1}-{i+num_plots_per_figure}.png")
+    #     plt.close()
+
+    # 预测的到达时刻图像，500个数据一个图形
+    predict_sequence_figure_url = os.path.dirname(os.path.realpath(__file__))+'/predict_sequence_figure/' +dataset_name+'/' +key+'/' +f'tw={train_window}_' + epoch_vision +'_'+model_directory_name +'/' 
+    if not os.path.exists(predict_sequence_figure_url):
+        os.makedirs(predict_sequence_figure_url)
+
+    num_plots = len(predictions)
     num_plots_per_figure = 500
 
     for i in range(0, num_plots, num_plots_per_figure):
         start_index = i
-        end_index = min(i + num_plots_per_figure, len(diff_predictions))
+        end_index = min(i + num_plots_per_figure, len(predictions))
         
         fig = plt.figure(figsize=(15, 10))
-        plt.plot(range(start_index, end_index), diff_sequence[start_index:end_index], label='actual arrival time interval', color='blue')
-        plt.plot(range(start_index, end_index), diff_predictions[start_index:end_index], label='predicted arrival time interval', color='red')
+        plt.plot(range(start_index, end_index), actual_value[start_index:end_index], label='actual arrival time', color='blue')
+        plt.plot(range(start_index, end_index), predictions[start_index:end_index], label='predicted arrival time', color='red')
         plt.legend()
         plt.xlabel('Arrival order')
-        plt.ylabel('arrival time interval(ms)')
-        plt.title(key + f'Container arrival time interval sequence (Plots {i+1}-{i+num_plots_per_figure})')
-        fig.savefig(predict_figure_url + key + f"_predicted_diff_sequence_{i+1}-{i+num_plots_per_figure}.png")
+        plt.ylabel('arrival time (ms)')
+        plt.title(key + f'Container arrival sequence (Plots {i+1}-{i+num_plots_per_figure})')
+        fig.savefig(predict_sequence_figure_url + key + f"_predicted_sequence_{i+1}-{i+num_plots_per_figure}.png")
         plt.close()
-
 
     # 预测误差
     error = []

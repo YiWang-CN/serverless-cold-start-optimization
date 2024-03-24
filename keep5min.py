@@ -2,6 +2,8 @@
 # -*- coding:utf-8 -*-
 '''
 保活五分钟
+exe={'key':[[start_time,request_use_time],...],...}
+未改，有问题，但不影响计算
 '''
 from Platform import input,statistics
 
@@ -73,7 +75,7 @@ def keep5min(requests,metas):
             # 正常响应
             exe_time[req_key].append([now_time,init_time+req["durationsInMs"]])
             request_end_time = req["startTime"] + init_time + req["durationsInMs"]
-        print("完成第",num,"个请求")
+        # print("完成第",num,"个请求")
         num=num+1
     # 未关闭的热启动容器记录waste_time
     for meta_key in warm:
@@ -86,13 +88,13 @@ def keep5min(requests,metas):
 
 if __name__=="__main__":
     # [requests,metas]=input.input(r"/home/wangyi/serverless/test_data")
-    [requests,metas]=input.input(r"F:\python_file\serverless\dataSet_1")
+    [requests,metas]=input.input("/home/wangyi/serverless/dataSet_3")
 
     [cold_start,waste_time,exe_time,response_fail]=keep5min(requests,metas)
 
     cold_statistics=statistics.cold_start_statistics(cold_start,exe_time,metas)
     mem_statistics=statistics.memory_statistics(waste_time,exe_time,metas)
-    res_statistics=statistics.response_statistics(response_fail,exe_time,metas)
+    # res_statistics=statistics.response_statistics(response_fail,exe_time,metas)
     print('cold_statistics:',cold_statistics)
     print('mem_statistics:',mem_statistics)
-    print('res_statistics:',res_statistics)
+    # print('res_statistics:',res_statistics)

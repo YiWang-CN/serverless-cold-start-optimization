@@ -205,16 +205,16 @@ if __name__ == "__main__":
         device = torch.device("cpu")
         print("GPU is not available, using CPU.")
 
-    train_window = 50
-    dataset_name = 'dataSet_2'
+    train_window = 20
+    dataset_name = 'dataSet_3'
     # key = 'roles1'
-    key = 'roles2'
-    # key = '8371b8baba81aac1ca237e492d7af0d851b4d141'
+    # key = 'roles2'
+    key = '8371b8baba81aac1ca237e492d7af0d851b4d141'
     batch_size = 128
     epochs = 500
     lr = 0.0001
-    epoch_vision = 'v10'
-    model_url = os.path.dirname(os.path.realpath(__file__)) + '/lstm_models/' + dataset_name +'/diff_50_'+ key +'/'
+    epoch_vision = 'v20'
+    model_url = os.path.dirname(os.path.realpath(__file__)) + '/lstm_models/' + dataset_name +'/diff_'+ key +'/'
     if not os.path.exists(model_url):
         os.makedirs(model_url)
 
@@ -245,7 +245,7 @@ if __name__ == "__main__":
     val_sequence_normalized = scaler.transform(np.array(val_sequence).reshape(-1, 1))
     test_sequence_normalized = scaler.transform(np.array(test_sequence).reshape(-1, 1))
 
-    # 将 val_sequence_normalized的后20个元素 与 test_sequence_normalized 合并
+    # 将 val_sequence_normalized的后tw个元素 与 test_sequence_normalized 合并
     test_input = val_sequence_normalized[-train_window:].tolist()
     test_sequence_normalized_list = test_sequence_normalized.tolist()
     test_input.extend(test_sequence_normalized_list)
@@ -308,6 +308,7 @@ if __name__ == "__main__":
     # plt.title(key + ' container arrival time series')
     # fig.savefig(figure_url + key + "_predicted_arrival_sequence.png")
     # plt.close()
+
     # fig = plt.figure(figsize=(15, 10))
     # # plt.plot(range(len(sequence)), sequence)
     # # 绘制第一条曲线
@@ -321,25 +322,48 @@ if __name__ == "__main__":
     # fig.savefig(figure_url + key + "_predicted_diff_sequence.png")
     # plt.close()
 
-    predict_figure_url = os.path.dirname(os.path.realpath(__file__))+'/predict_figure/' +dataset_name+'/' +key+'/' +f'tw={train_window}_' + epoch_vision +'/' 
-    if not os.path.exists(predict_figure_url):
-        os.makedirs(predict_figure_url)
+    # 预测的时间间隔图像，500个数据一个图形
+    # predict_figure_url = os.path.dirname(os.path.realpath(__file__))+'/predict_figure/' +dataset_name+'/' +key+'/' +f'tw={train_window}_' + epoch_vision +'/' 
+    # if not os.path.exists(predict_figure_url):
+    #     os.makedirs(predict_figure_url)
 
-    num_plots = len(diff_predictions)
+    # num_plots = len(diff_predictions)
+    # num_plots_per_figure = 500
+
+    # for i in range(0, num_plots, num_plots_per_figure):
+    #     start_index = i
+    #     end_index = min(i + num_plots_per_figure, len(diff_predictions))
+        
+    #     fig = plt.figure(figsize=(15, 10))
+    #     plt.plot(range(start_index, end_index), diff_sequence[start_index:end_index], label='actual arrival time interval', color='blue')
+    #     plt.plot(range(start_index, end_index), diff_predictions[start_index:end_index], label='predicted arrival time interval', color='red')
+    #     plt.legend()
+    #     plt.xlabel('Arrival order')
+    #     plt.ylabel('arrival time interval(ms)')
+    #     plt.title(key + f'Container arrival time interval sequence (Plots {i+1}-{i+num_plots_per_figure})')
+    #     fig.savefig(predict_figure_url + key + f"_predicted_diff_sequence_{i+1}-{i+num_plots_per_figure}.png")
+    #     plt.close()
+
+    # 预测的到达时刻图像，500个数据一个图形
+    predict_sequence_figure_url = os.path.dirname(os.path.realpath(__file__))+'/predict_sequence_figure/' +dataset_name+'/' +key+'/' +f'tw={train_window}_' + epoch_vision +'/' 
+    if not os.path.exists(predict_sequence_figure_url):
+        os.makedirs(predict_sequence_figure_url)
+
+    num_plots = len(predictions)
     num_plots_per_figure = 500
 
     for i in range(0, num_plots, num_plots_per_figure):
         start_index = i
-        end_index = min(i + num_plots_per_figure, len(diff_predictions))
+        end_index = min(i + num_plots_per_figure, len(predictions))
         
         fig = plt.figure(figsize=(15, 10))
-        plt.plot(range(start_index, end_index), diff_sequence[start_index:end_index], label='actual arrival time interval', color='blue')
-        plt.plot(range(start_index, end_index), diff_predictions[start_index:end_index], label='predicted arrival time interval', color='red')
+        plt.plot(range(start_index, end_index), actual_value[start_index:end_index], label='actual arrival time', color='blue')
+        plt.plot(range(start_index, end_index), predictions[start_index:end_index], label='predicted arrival time', color='red')
         plt.legend()
         plt.xlabel('Arrival order')
-        plt.ylabel('arrival time interval(ms)')
-        plt.title(key + f'Container arrival time interval sequence (Plots {i+1}-{i+num_plots_per_figure})')
-        fig.savefig(predict_figure_url + key + f"_predicted_diff_sequence_{i+1}-{i+num_plots_per_figure}.png")
+        plt.ylabel('arrival time (ms)')
+        plt.title(key + f'Container arrival sequence (Plots {i+1}-{i+num_plots_per_figure})')
+        fig.savefig(predict_sequence_figure_url + key + f"_predicted_sequence_{i+1}-{i+num_plots_per_figure}.png")
         plt.close()
 
     # 预测误差
