@@ -419,9 +419,9 @@ if __name__ == "__main__":
 
     # 统计指标 cold_statistics,mem_statistics
     cold_statistics = statistics.cold_start_statistics_predict(cold_start_predict, exe_time, metas)
-    mem_statistics = statistics.memory_statistics(waste_time, exe_time, metas)
+    mem_statistics = statistics.memory_statistics_predict(waste_time, exe_time, metas)
 
-    print('cold_statistics[key]=[cold_num,all_num,frequency,cold_time,utilization]')
+    print('cold_statistics[key]=[cold_num,all_num,cold_frequency,cold_time,utilization]')
     print(cold_statistics)
     print('mem_statistics[key]=[waste_mem,all_mem,utilization]')
     print(mem_statistics)
