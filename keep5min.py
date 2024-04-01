@@ -96,12 +96,12 @@ def keep5min(requests,metas):
 
 if __name__=="__main__":
     # [requests,metas]=input.input(r"/home/wangyi/serverless/test_data")
-    [requests,metas]=input.input("/home/wangyi/serverless/dataSet_2")
+    [requests,metas]=input.input("/home/wangyi/serverless/dataSet_1")
 
     [cold_start,waste_time,exe_time,response_fail]=keep5min(requests,metas)
 
     cold_statistics=statistics.cold_start_statistics(cold_start,exe_time,metas)
-    mem_statistics=statistics.memory_statistics(waste_time,exe_time,metas)
+    mem_statistics=statistics.memory_statistics(waste_time,cold_start,exe_time,metas)
     # res_statistics=statistics.response_statistics(response_fail,exe_time,metas)
     # TODO 输出结果 导入表格
     print('cold_statistics:')

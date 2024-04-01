@@ -2,6 +2,9 @@
 # -*- coding:utf-8 -*-
 
 '''
+time utilization = exe time/request use time
+memory  utilization = exe time/system use time  
+
 指标统计：冷启动、资源利用、响应
 输入：cold_start/cold_start_predict、waste_time、exe_time/exe_time_predict
 冷启动：每种容器的冷启动次数，总次数，冷启动频率，冷启动的时延，时间利用率
@@ -111,25 +114,29 @@ def cold_start_statistics_predict(cold_start_predict,exe_time,metas):
     return cold_statistics
 
 # 记录资源利用，输出一个字典，记录每种容器的浪费资源，总使用资源，资源利用率
-def memory_statistics(waste_time,exe_time,metas):
+def memory_statistics(waste_time,cold_start,exe_time,metas):
     mem_statistics=input.createdict(metas)
     all_waste_mem=0
     all_all_mem=0
 
+
     for key in waste_time:
         waste=sum(waste_time[key])
-
-        # 因为不方便统计容器的总使用时间，所以使用request_use_time + waste_time代替
+        cold_num=len(cold_start[key])
+        key_memory = 0
+        key_init_time = 0
+        for ele in metas:
+            if key == ele['key']:
+                key_memory = ele["memoryInMb"]
+                key_init_time = ele["initDurationInMs"]
+                break
+        cold_time = cold_num*key_init_time
+        waste = waste + cold_time       # 浪费的资源包括：冷启动的资源和热容器空闲资源
+        # 因为不方便统计容器的总使用时间，所以使用sys_use_time = request_use_time + waste_time代替
         all_time = 0
         for row in exe_time[key]:
             all_time = all_time+row[1]
         all_time = all_time + waste
-
-        key_memory = 0
-        for ele in metas:
-            if key == ele['key']:
-                key_memory = ele["memoryInMb"]
-                break
 
         waste_mem=waste*key_memory
         all_mem = all_time*key_memory
@@ -147,13 +154,23 @@ def memory_statistics(waste_time,exe_time,metas):
     return mem_statistics
 
 # 使用预测模式情况下, 记录资源利用，输出一个字典，记录每种容器的浪费资源，总使用资源，资源利用率
-def memory_statistics_predict(waste_time,exe_time,metas):
+def memory_statistics_predict(waste_time,cold_start_predict,exe_time,metas):
     mem_statistics=input.createdict(metas)
     all_waste_mem=0
     all_all_mem=0
+    all_req_exe_mem = 0
 
     for key in waste_time:
         waste=sum(waste_time[key])
+
+# request exe time = request use time - cold time 
+        cold_time = 0
+        for row in cold_start_predict[key]:
+            cold_time = cold_time + row[1]
+        req_use_time = 0
+        for row in exe_time[key]:
+            req_use_time = req_use_time+row[1]
+        req_exe_time = req_use_time - cold_time
 
         all_time = 0
         for row in exe_time[key]:
@@ -166,17 +183,20 @@ def memory_statistics_predict(waste_time,exe_time,metas):
                 break
 
         waste_mem=waste*key_memory
+        req_exe_mem = req_exe_time*key_memory
         all_mem = all_time*key_memory
+
         all_waste_mem=all_waste_mem+waste_mem
+        all_req_exe_mem = all_req_exe_mem + req_exe_mem
         all_all_mem=all_all_mem+all_mem
 
         if all_mem == 0:
             utilization=0
         else:
-            utilization=1-waste_mem/all_mem
+            utilization=req_exe_mem/all_mem
 
         mem_statistics[key]=[waste_mem,all_mem,utilization]
-    all_utilization = 1 - all_waste_mem / all_all_mem
+    all_utilization = all_req_exe_mem / all_all_mem
     mem_statistics['all']=[all_waste_mem,all_all_mem,all_utilization]
     return mem_statistics
 
