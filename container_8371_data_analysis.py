@@ -62,85 +62,85 @@ if not os.path.exists(figure_url):
 # fig.savefig(figure_url +"arrival_sequence.png")
 # plt.close()
 
-# # 到达间隔的时序图
-# diff_sequence_mean = np.mean(diff_sequence)
-# diff_sequence_variance = np.var(diff_sequence)
-# fig = plt.figure(figsize=(15, 10))
-# # 布尔索引，选择y轴小于diff_interval_threshold的部分
-# # diff_interval_threshold = float('inf')
-# diff_interval_threshold = 2000
-# selected_diff_sequence = [diff for diff in diff_sequence if diff < diff_interval_threshold]
-# selected_indices = [i for i, diff in enumerate(diff_sequence) if diff < diff_interval_threshold]
-
-# plt.plot(selected_indices, selected_diff_sequence)
-# plt.axhline(y=1000, color='r', linestyle='--')
-# # plt.axhline(y=2000, color='r', linestyle='--')
-# plt.xlabel('order', fontsize=18)
-# plt.ylabel('arrival time interval(ms)',fontsize=18)
-# plt.title(key[:5] + f' Container arrival time interval sequence (less than {diff_interval_threshold} ms)', fontsize=18)
-# plt.xticks(fontsize=16)
-# plt.yticks(fontsize=16)
-# ymin, ymax = plt.gca().get_ylim()
-# xmin, xmax = plt.gca().get_xlim()
-# # 确定 "mean:" 和 "variance:" 的文本长度
-# mean_label = "mean: "
-# variance_label = "variance: "
-# max_label_length = max(len(mean_label), len(variance_label))
-# # 格式化文本并添加到 plt.text() 中
-# # plt.text(xmax*0.75, ymax*0.95, f'{mean_label:<{max_label_length}} {diff_sequence_mean:<.2f}\n{variance_label:<{max_label_length}} {diff_sequence_variance:<.2f}', fontsize=15, color='black', ha='left', va='top')  # 添加对应的坐标
-# fig.savefig(figure_url + f"diff_sequence_less_{diff_interval_threshold}_ms.png")
-# plt.close()
-
-
-# 到达间隔的累积分布图
-# 确定 init_time mean_run_time 对应的累积概率
-hist, bin_edges = np.histogram(diff_sequence, bins=range(min(diff_sequence), max(diff_sequence) + 1), density=True)
-cumulative_probs = np.cumsum(hist)
-init_time_index = np.where(bin_edges >= init_time)[0][0]
-cumulative_prob_at_init_time = cumulative_probs[init_time_index] # init_time 对应的累积概率
-mean_run_time = np.mean(duration)
-mean_run_time_index = np.where(bin_edges >= mean_run_time)[0][0]
-cumulative_prob_at_mean_run_time = cumulative_probs[mean_run_time_index] # mean_run_time 对应的累积概率
-# 绘制累积分布图
-limit_xmax = 1000
+# 到达间隔的时序图
+diff_sequence_mean = np.mean(diff_sequence)
+diff_sequence_variance = np.var(diff_sequence)
 fig = plt.figure(figsize=(15, 10))
-plt.hist(diff_sequence, bins=range(min(diff_sequence), max(diff_sequence) + 1), cumulative=True, density=True, histtype='step', linewidth=1.5)
-plt.xlabel('arrival time interval(ms)',fontsize=18)
-plt.ylabel('Cumulative Probability',fontsize=18)
-plt.title(key[:5] + f' Container arrival time interval cumulative distribution(less than {limit_xmax}ms)',fontsize=18)
-plt.xlim(xmin=min(diff_sequence), xmax=min(limit_xmax, max(diff_sequence)))  # 限制x轴范围
-plt.xticks(fontsize=15)
-plt.yticks(fontsize=15)
+# 布尔索引，选择y轴小于diff_interval_threshold的部分
+diff_interval_threshold = float('inf')
+# diff_interval_threshold = 2000
+selected_diff_sequence = [diff for diff in diff_sequence if diff < diff_interval_threshold]
+selected_indices = [i for i, diff in enumerate(diff_sequence) if diff < diff_interval_threshold]
 
-# 添加init_time对应的垂直虚线和水平虚线
+plt.plot(selected_indices, selected_diff_sequence)
+plt.axvline(x=1500, color='r', linestyle='--')
+# plt.axhline(y=2000, color='r', linestyle='--')
+plt.xlabel('order', fontsize=18)
+plt.ylabel('arrival time interval(ms)',fontsize=18)
+plt.title(key[:5] + f' Container arrival time interval sequence (less than {diff_interval_threshold} ms)', fontsize=18)
+plt.xticks(fontsize=16)
+plt.yticks(fontsize=16)
 ymin, ymax = plt.gca().get_ylim()
 xmin, xmax = plt.gca().get_xlim()
-plt.axvline(x=init_time, ymin=0, ymax=cumulative_prob_at_init_time/ymax, color='r', linestyle='--')  # 添加垂直虚线
-plt.axhline(y=cumulative_prob_at_init_time, xmin= 0,xmax=init_time/xmax, color='r', linestyle='--')  # 添加水平虚线
-plt.text(init_time, cumulative_prob_at_init_time, f'({init_time},{cumulative_prob_at_init_time:.2f})', fontsize=15, color='black', ha='left', va='top')  # 添加对应的坐标
-plt.text(init_time, -0.01, f'init_time:{init_time}', fontsize=15, color='black', ha='center', va='top')  # 添加对应的x轴坐标
-plt.text(0, cumulative_prob_at_init_time, f'{cumulative_prob_at_init_time:.2f}', fontsize=15, color='black', ha='right', va='center')  # 添加对应的y轴坐标
-# 添加mean_run_time对应的垂直虚线和水平虚线
-plt.axvline(x=mean_run_time, ymin=0, ymax=cumulative_prob_at_mean_run_time/ymax, color='g', linestyle='--')  # 添加垂直虚线
-plt.axhline(y=cumulative_prob_at_mean_run_time, xmin= 0,xmax=mean_run_time/xmax, color='g', linestyle='--')  # 添加水平虚线
-plt.text(mean_run_time, cumulative_prob_at_mean_run_time, f'({mean_run_time:.2f},{cumulative_prob_at_mean_run_time:.2f})', fontsize=15, color='black', ha='left', va='top')  # 添加对应的坐标
-plt.text(mean_run_time, 0.04, f'mean_run_time:{mean_run_time:.2f}', fontsize=15, color='black', ha='center', va='top')  # 添加对应的x轴坐标
-plt.text(0, cumulative_prob_at_mean_run_time, f'{cumulative_prob_at_mean_run_time:.2f}', fontsize=15, color='black', ha='right', va='center')  # 添加对应的y轴坐标
-
-plt.scatter(mean_run_time, cumulative_prob_at_mean_run_time, color='g', s=20)  # 描绘对应的点
-
-# 添加水平虚线和对应的垂直虚线
-plt.axhline(y=1, color='gray', linestyle='--')  # 添加水平虚线
-y_value_max = max(cumulative_probs)
-for y_value in np.arange(0.5,y_value_max, 0.1):
-    x_value = bin_edges[np.where(cumulative_probs >= (y_value))[0][0]]
-    plt.axhline(y=y_value, xmin= 0, xmax=x_value/xmax, color='gray', linestyle='--')  # 添加水平虚线
-    plt.axvline(x=x_value, ymin=0, ymax=y_value/ymax, color='gray', linestyle='--')  # 添加对应的垂直虚线
-    plt.text(x_value, y_value, f'({x_value},{y_value:.2f})', fontsize=15, color='black', ha='left', va='top')  # 添加对应的坐标
-    plt.scatter(x_value, y_value, color='gray', s=20)  # 描绘对应的点
-
-fig.savefig(figure_url + f"diff_cumulative_distribution_less_{limit_xmax}_ms.png")
+# 确定 "mean:" 和 "variance:" 的文本长度
+mean_label = "mean: "
+variance_label = "variance: "
+max_label_length = max(len(mean_label), len(variance_label))
+# 格式化文本并添加到 plt.text() 中
+# plt.text(xmax*0.75, ymax*0.95, f'{mean_label:<{max_label_length}} {diff_sequence_mean:<.2f}\n{variance_label:<{max_label_length}} {diff_sequence_variance:<.2f}', fontsize=15, color='black', ha='left', va='top')  # 添加对应的坐标
+fig.savefig(figure_url + f"diff_sequence_less_{diff_interval_threshold}_ms_1.png")
 plt.close()
+
+
+# # 到达间隔的累积分布图
+# # 确定 init_time mean_run_time 对应的累积概率
+# hist, bin_edges = np.histogram(diff_sequence, bins=range(min(diff_sequence), max(diff_sequence) + 1), density=True)
+# cumulative_probs = np.cumsum(hist)
+# init_time_index = np.where(bin_edges >= init_time)[0][0]
+# cumulative_prob_at_init_time = cumulative_probs[init_time_index] # init_time 对应的累积概率
+# mean_run_time = np.mean(duration)
+# mean_run_time_index = np.where(bin_edges >= mean_run_time)[0][0]
+# cumulative_prob_at_mean_run_time = cumulative_probs[mean_run_time_index] # mean_run_time 对应的累积概率
+# # 绘制累积分布图
+# limit_xmax = 1000
+# fig = plt.figure(figsize=(15, 10))
+# plt.hist(diff_sequence, bins=range(min(diff_sequence), max(diff_sequence) + 1), cumulative=True, density=True, histtype='step', linewidth=1.5)
+# plt.xlabel('arrival time interval(ms)',fontsize=18)
+# plt.ylabel('Cumulative Probability',fontsize=18)
+# plt.title(key[:5] + f' Container arrival time interval cumulative distribution(less than {limit_xmax}ms)',fontsize=18)
+# plt.xlim(xmin=min(diff_sequence), xmax=min(limit_xmax, max(diff_sequence)))  # 限制x轴范围
+# plt.xticks(fontsize=15)
+# plt.yticks(fontsize=15)
+
+# # 添加init_time对应的垂直虚线和水平虚线
+# ymin, ymax = plt.gca().get_ylim()
+# xmin, xmax = plt.gca().get_xlim()
+# plt.axvline(x=init_time, ymin=0, ymax=cumulative_prob_at_init_time/ymax, color='r', linestyle='--')  # 添加垂直虚线
+# plt.axhline(y=cumulative_prob_at_init_time, xmin= 0,xmax=init_time/xmax, color='r', linestyle='--')  # 添加水平虚线
+# plt.text(init_time, cumulative_prob_at_init_time, f'({init_time},{cumulative_prob_at_init_time:.2f})', fontsize=15, color='black', ha='left', va='top')  # 添加对应的坐标
+# plt.text(init_time, -0.01, f'init_time:{init_time}', fontsize=15, color='black', ha='center', va='top')  # 添加对应的x轴坐标
+# plt.text(0, cumulative_prob_at_init_time, f'{cumulative_prob_at_init_time:.2f}', fontsize=15, color='black', ha='right', va='center')  # 添加对应的y轴坐标
+# # 添加mean_run_time对应的垂直虚线和水平虚线
+# plt.axvline(x=mean_run_time, ymin=0, ymax=cumulative_prob_at_mean_run_time/ymax, color='g', linestyle='--')  # 添加垂直虚线
+# plt.axhline(y=cumulative_prob_at_mean_run_time, xmin= 0,xmax=mean_run_time/xmax, color='g', linestyle='--')  # 添加水平虚线
+# plt.text(mean_run_time, cumulative_prob_at_mean_run_time, f'({mean_run_time:.2f},{cumulative_prob_at_mean_run_time:.2f})', fontsize=15, color='black', ha='left', va='top')  # 添加对应的坐标
+# plt.text(mean_run_time, 0.04, f'mean_run_time:{mean_run_time:.2f}', fontsize=15, color='black', ha='center', va='top')  # 添加对应的x轴坐标
+# plt.text(0, cumulative_prob_at_mean_run_time, f'{cumulative_prob_at_mean_run_time:.2f}', fontsize=15, color='black', ha='right', va='center')  # 添加对应的y轴坐标
+
+# plt.scatter(mean_run_time, cumulative_prob_at_mean_run_time, color='g', s=20)  # 描绘对应的点
+
+# # 添加水平虚线和对应的垂直虚线
+# plt.axhline(y=1, color='gray', linestyle='--')  # 添加水平虚线
+# y_value_max = max(cumulative_probs)
+# for y_value in np.arange(0.5,y_value_max, 0.1):
+#     x_value = bin_edges[np.where(cumulative_probs >= (y_value))[0][0]]
+#     plt.axhline(y=y_value, xmin= 0, xmax=x_value/xmax, color='gray', linestyle='--')  # 添加水平虚线
+#     plt.axvline(x=x_value, ymin=0, ymax=y_value/ymax, color='gray', linestyle='--')  # 添加对应的垂直虚线
+#     plt.text(x_value, y_value, f'({x_value},{y_value:.2f})', fontsize=15, color='black', ha='left', va='top')  # 添加对应的坐标
+#     plt.scatter(x_value, y_value, color='gray', s=20)  # 描绘对应的点
+
+# fig.savefig(figure_url + f"diff_cumulative_distribution_less_{limit_xmax}_ms.png")
+# plt.close()
 
 
 # # 到达间隔的分布图

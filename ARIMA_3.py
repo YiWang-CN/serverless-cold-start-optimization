@@ -10,9 +10,12 @@ from Platform import input, statistics
 import pmdarima as pm
 import statistics
 from statsmodels.stats.diagnostic import acorr_ljungbox
+import pickle
 '''
-一次预测多个值
+直接使用二次差分的数据
+20个数据拟合，预测一个点
 '''
+
 # 定义函数，从数据集里按照容器分类提取 时间和运行时间 序列 和 时间序列
 def get_time_sequences(requests, metas):
     '''从数据集里按照容器分类 提取 时间和运行时间 序列 和 时间序列
@@ -71,18 +74,26 @@ val_sequence = sequence[train_samples:train_samples+val_samples]
 test_sequence = sequence[train_samples+val_samples:]
 print("数据集划分完成")
 
-figure_url = '/home/wangyi/serverless/ARIMA_figures/'
+train_window = 50
+p = 0
+d = 0
+q = 1
+
+figure_url = f'/home/wangyi/serverless/ARIMA_single_step_figures/{key}/({p},{d},{q})/tain_window={train_window}/'
 if not os.path.exists(figure_url):
         os.makedirs(figure_url)
 
-model_url = '/home/wangyi/serverless/ARIMA_model/' + f'{key}/'
+model_url = '/home/wangyi/serverless/ARIMA_single_step_model/' + f'{key}/'
 if not os.path.exists(model_url):
         os.makedirs(model_url)
 
-dta=pd.Series(train_sequence)
+data = diff2_sequence[train_samples-2-train_window:train_samples-2+val_samples]
+# data = sequence[train_samples-train_window:train_samples+val_samples]
+dta=pd.Series(data[:train_window])
+dta = dta.reset_index(drop=True)
 # dta = train_sequence
 
-model_result = sm.tsa.ARIMA(dta,order=(15,2,1)).fit()
+model_result = sm.tsa.ARIMA(dta,order=(p,d,q)).fit()
 # # model_result = model.fit()
 # val_prediction = model_result.forecast(20)
 # val_error = np.subtract(val_sequence[:20], val_prediction)
@@ -93,31 +104,42 @@ model_result = sm.tsa.ARIMA(dta,order=(15,2,1)).fit()
 # res = acorr_ljungbox(val_error, lags=15, boxpierce=True, return_df=True)
 # print(res)
 
-predict_window = 20
+
 
 # 模型在验证集上的预测
 val_model_url = model_url + 'val/'
 if not os.path.exists(val_model_url):
         os.makedirs(val_model_url)
-val_prediction = []
-for i in range(0, len(val_sequence), predict_window):
-    print(i)
-    # 预测50个值
-    prediction = model_result.forecast(predict_window)
+val_diff2_prediction = []
+for i in range(0, len(val_sequence)):
+    print(i, '/',len(val_sequence)-1)
+    # 预测1个值
+    prediction = model_result.forecast(1)
     # 将预测值加入结果列表
-    val_prediction.extend(prediction)
-    # 保存模型
-    model_result.save(val_model_url + f'{i}.pkl')
+    val_diff2_prediction.extend(prediction)
+    # # 保存模型
+    # model_result.save(val_model_url + f'{i}.pkl')
     # 该模型的参数
-    current_params = model_result.params
+    # current_params = model_result.params
     # 将50个真实值加入dta重新拟合
     # dta.extend(val_sequence[i:min(i+predict_window, len(val_sequence))])
-    dta = pd.concat([dta, pd.Series(val_sequence[i:min(i+predict_window, len(val_sequence))])])
+    dta = pd.Series(data[i+1:i+train_window])
     dta = dta.reset_index(drop=True)
-    model_result = sm.tsa.ARIMA(dta,order=(15,2,1)).fit(start_params=current_params)
-model_result.save(val_model_url + f'{len(val_sequence)}.pkl')
+    model_result = sm.tsa.ARIMA(dta,order=(p,d,q)).fit(start_params=model_result.params)
+# model_result.save(val_model_url + f'{len(val_sequence)}.pkl')
+pickle.dump(val_diff2_prediction, open(figure_url + 'val_diff2_prediction.pkl', 'wb'))
+print(len(val_sequence))
+print(len(val_diff2_prediction))
 
-val_prediction = val_prediction[:len(val_sequence)]
+# 还原二次差分
+last_diff_time=diff1_sequence[train_samples-2:train_samples-2+val_samples]
+diff_predictions = [x + y for x, y in zip(last_diff_time, val_diff2_prediction)]
+
+last_arrival_time=sequence[train_samples-1:train_samples-1+val_samples]
+val_prediction = [x + y for x, y in zip(last_arrival_time, diff_predictions)]
+pickle.dump(val_prediction, open(figure_url + 'val_prediction.pkl', 'wb'))
+# val_prediction = pickle.load(open(figure_url + 'val_prediction.pkl', 'rb'))
+# val_prediction = val_prediction[:len(val_sequence)]
 # 计算偏差的绝对值偏差的绝对值
 val_error = np.subtract(val_sequence, val_prediction)
 absolute_errors = np.abs(val_error)
@@ -143,8 +165,12 @@ plt.legend()
 plt.savefig(figure_url + key + '_ARIMA.png')
 plt.close(fig)
 
-
-
+fig = plt.figure(figsize=(12, 8))
+plt.plot(val_sequence[:100], label='True')
+plt.plot(val_prediction[:100], label='Predict')
+plt.legend()
+plt.savefig(figure_url + key + '_ARIMA_100.png')
+plt.close(fig)
 
 # #为绘图的连续性把2090的值添加为PredicValue第一个元素
 # PredicValue=[]

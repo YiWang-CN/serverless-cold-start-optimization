@@ -1,8 +1,13 @@
 #!/usr/bin/env python
 # -*- coding:utf-8 -*-
 
-'''对单个容器，进行训练和预测，确保模型拟合'''
-
+'''对8371容器，使用清洗后的数据，进行训练至过拟合
+修改隐藏层神经元128个/200个
+训练窗口为20/50
+添加了warm_start_time，完善了指标统计时预热时间小于前一时刻的错误
+修改极小间隔值冲击出现的周期
+'''
+# TODO 批次过大，损失的训练数据过多
 import torch
 import torch.nn as nn
 # import seaborn as sns
@@ -14,6 +19,8 @@ from Platform import input, statistics
 from datetime import datetime
 import sys
 import pickle
+import random
+import csv
 
 # 定义函数，从数据集里按照容器分类提取 时间和运行时间 序列 和 时间序列
 def get_time_sequences(requests, metas):
@@ -68,14 +75,25 @@ def plot_loss(train_loss, val_loss, save_path):
     fig.savefig(save_path)
     plt.close()
 
+# 定义函数，绘制部分训练损失和验证损失的图像
+def plot_part_loss(train_loss, val_loss, save_path , start, end):
+    fig = plt.figure(figsize=(10, 10))
+    plt.plot(range(start,end),train_loss[start:end], label='Training Loss')
+    plt.plot(range(start,end),val_loss[start:end], label='Validation Loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.title(f'{start}-{end} epochs Training and Validation Loss')
+    plt.legend()
+    fig.savefig(save_path)
+    plt.close()
 
 # 创建LSTM模型类
 class LSTM(nn.Module):
     '''input_size：对应于输入中的特征数量。虽然我们的序列长度是 tw（20），但每个时间不我们只有 1 个值，即到达时刻，因此输入大小将为 1。
-hidden_layer_size：指定隐藏层的数量以及每层中神经元的数量。我们将有一层 200 个神经元。
+hidden_layer_size：指定隐藏层的数量以及每层中神经元的数量。我们将有一层 128 个神经元。
 output_size：由于我们要预测未来1个时间步的到达时刻，因此输出大小将为1。'''
 
-    def __init__(self, input_size=1, hidden_layer_size=200, output_size=1,batch_size=1):
+    def __init__(self, input_size=1, hidden_layer_size=128, output_size=1,batch_size=1):
         super().__init__()
         self.hidden_layer_size = hidden_layer_size
         self.num_layers = 1
@@ -114,10 +132,9 @@ def training(epochs, train_inout_seq, val_inout_seq, model, optimizer,batch_size
     model.train() # 设置为训练模式
     epoch_loss = []
     val_loss = []
-    for i in range(epochs):
+    for i in range(1,epochs+1):
         loss_list = []
-        # for seq, labels in train_inout_seq:
-        #     seq, labels = seq.to(device), labels.to(device)
+
         for batch_idx in range(0, int(len(train_inout_seq)/batch_size)):
             batch_data = train_inout_seq[batch_idx:batch_idx+batch_size]
             seq = torch.stack([data[0].to(device) for data in batch_data]).unsqueeze(-1)
@@ -156,8 +173,8 @@ def training(epochs, train_inout_seq, val_inout_seq, model, optimizer,batch_size
         val_loss.append(val_mean_loss)
 
         print(f'epoch: {i:3} loss: {mean_loss:10.8f}  val_loss: {val_mean_loss:10.8f}')
-        # 每10轮或最后一轮 保存模型参数和画损失函数
-        if i%10 == 0 or i == epochs-1:
+        # 每10轮或最后一轮 保存模型参数和画三个损失函数：1~n，5~n，倒数50轮
+        if i%10 == 0 or i == epochs:
             save_path = model_url + f'v{i}/'
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
@@ -166,10 +183,13 @@ def training(epochs, train_inout_seq, val_inout_seq, model, optimizer,batch_size
                 pickle.dump(epoch_loss, f)
             with open(save_path + 'val_loss.pkl', 'wb') as f:
                 pickle.dump(val_loss, f)
-
             torch.save(model.state_dict(), save_path + 'model_weights.pth')  # 保存模型参数
-            plot_loss(epoch_loss, val_loss, save_path + 'loss.png') #绘制损失函数
-            # print(f'epoch: {i:3} loss: {mean_loss:10.8f}')
+            plot_loss(epoch_loss, val_loss, save_path + 'loss.png') #绘制0~n损失函数
+            if len(epoch_loss) > 5:
+                plot_part_loss(epoch_loss, val_loss, save_path + '5-n_loss.png',start=5,end=len(epoch_loss)) #绘制5~n损失函数
+            if len(epoch_loss) > 50:
+                plot_part_loss(epoch_loss, val_loss, save_path + 'last_50_loss.png',start=len(epoch_loss)-50,end=len(epoch_loss)) #绘制倒数50轮损失函数
+
 
 # 定义函数，做预测
 def predict(test_input, train_window, model, batch_size=1):
@@ -205,30 +225,52 @@ if __name__ == "__main__":
         device = torch.device("cpu")
         print("GPU is not available, using CPU.")
 
-    train_window = 20
-    dataset_name = 'dataSet_3'
-    # key = 'roles1'
-    # key = 'roles2'
-    key = '8371b8baba81aac1ca237e492d7af0d851b4d141'
+    train_window = 50
+    dataset_name = 'dataSet_1'
+    key = 'nodes1'
     batch_size = 128
-    epochs = 500
+    epochs = 5000
     lr = 0.0001
-    epoch_vision = 'v20'
-    model_url = os.path.dirname(os.path.realpath(__file__)) + '/lstm_models/' + dataset_name +'/diff_'+ key +'/'
+    epoch_vision = 'v180'
+    discard = 0
+    model_url = os.path.dirname(os.path.realpath(__file__)) + '/test_lstm_models/' + dataset_name +f'/diff_cleaned_cycle_128_tw={train_window}_'+ key +'/'
     if not os.path.exists(model_url):
         os.makedirs(model_url)
 
     [requests, metas] = input.input(r"/home/wangyi/serverless/" + dataset_name)
     [time_sequences, sequences] = get_time_sequences(requests, metas)
+    time_sequences[key] = time_sequences[key][discard:]
+    sequences[key] = sequences[key][discard:]
     for ele in metas:
         if ele['key'] == key:
             init_time = ele['initDurationInMs']
 
-    advance_time = init_time  # 提前预热的时间，单位ms
-
     # 数据做差分
     sequence = sequences[key]
     diff_sequence = [sequence[i] - sequence[i-1] for i in range(1, len(sequence))]
+
+    # 找到低于29000的数据的位置
+    low_values_indices = [i for i, val in enumerate(diff_sequence) if val < 10000]
+    
+    # 遍历低于29000的数据位置，计算在其间的其他数据的数量以及删除概率
+    for i in range(len(low_values_indices) - 1):
+        start_index = low_values_indices[i]
+        end_index = low_values_indices[i + 1]
+        # 计算在这两个数据中间的其他数据的数量
+        num_other_data = end_index - start_index - 1
+        # 计算删除概率
+        if num_other_data == 0:
+            deletion_probability = 0
+        else:
+            deletion_probability = (num_other_data - train_window/2) / num_other_data
+        # 如果随机数小于删除概率，则删除对应位置的数据
+        for j in range(start_index + 1, end_index):
+            random_number = random.random()
+            if random_number < deletion_probability:
+                diff_sequence[j] =  None  # 删除数据（将其设置为None或其他特定值）
+
+    # 过滤掉被删除的数据（将None值去除）
+    diff_sequence = [data for data in diff_sequence if data is not None]
 
     # 划分训练集：验证集：测试集 = 4:1:1
     total_samples = len(diff_sequence)
@@ -245,6 +287,46 @@ if __name__ == "__main__":
     val_sequence_normalized = scaler.transform(np.array(val_sequence).reshape(-1, 1))
     test_sequence_normalized = scaler.transform(np.array(test_sequence).reshape(-1, 1))
 
+##########################################################
+    # # 绘制输入图形
+    # input_figure_url = os.path.dirname(os.path.realpath(__file__)) + '/test_lstm_input_figure/' + f'{dataset_name}/'+ key + '/'
+    # if not os.path.exists(input_figure_url):
+    #     os.makedirs(input_figure_url)
+
+    # # 创建一个包含变量名和值的字典
+    # sequence_dict = {
+    #     'train_sequence': train_sequence,
+    #     'val_sequence': val_sequence,
+    #     'test_sequence': test_sequence,
+    #     'train_sequence_normalized': train_sequence_normalized,
+    #     'val_sequence_normalized': val_sequence_normalized,
+    #     'test_sequence_normalized': test_sequence_normalized
+    # }
+    
+    # for sequence_name, sequence_value in sequence_dict.items():  # 输出字典中的变量名和值
+    #     input_figure_path = input_figure_url + f'{sequence_name}/'
+    #     if not os.path.exists(input_figure_path):
+    #         os.makedirs(input_figure_path)
+
+    #     # 预测的时间间隔图像，100个数据一个图形
+    #     num_plots = len(sequence_value)
+    #     num_plots_per_figure = 300
+    #     for i in range(0, num_plots, num_plots_per_figure):
+    #         start_index = i
+    #         end_index = min(i + num_plots_per_figure, len(sequence_value))
+    #         # limit_ymin = 29500
+    #         # limit_ymax = 30500
+    #         fig = plt.figure(figsize=(15, 10))
+    #         plt.plot(range(start_index, end_index), sequence_value[start_index:end_index])
+    #         # plt.ylim(ymin=limit_ymin, ymax=limit_ymax)  # 限制y轴范围
+    #         plt.xlabel('Arrival order')
+    #         plt.ylabel(f'{sequence_name} time interval')
+    #         plt.title(key + f'{sequence_name} time interval sequence (Plots {i+1}-{i+num_plots_per_figure})')
+    #         fig.savefig(input_figure_path + f"{sequence_name}_time_interval_{i+1}-{i+num_plots_per_figure}.png")
+    #         plt.close()
+    # print("输入图形绘制完成")
+##########################################################
+    
     # 将 val_sequence_normalized的后tw个元素 与 test_sequence_normalized 合并
     test_input = val_sequence_normalized[-train_window:].tolist()
     test_sequence_normalized_list = test_sequence_normalized.tolist()
@@ -266,19 +348,102 @@ if __name__ == "__main__":
     loss_function = nn.MSELoss().to(device)
     print("LSTM模型初始化完成，开始训练")
 
-    # 统计模型参数数量
-    total_params = sum(p.numel() for p in model.parameters())
-    print("总参数数量:", total_params)
+##########################################################################
+# 绘制输出图像
+    for epoch in range(10,201,10):
+        # 加载模型
+        epoch_vision = f'v{epoch}'
+        weights_file = model_url + epoch_vision + '/model_weights.pth'
+        if os.path.exists(weights_file):
+            model = model.to(device)
+            model.load_state_dict(torch.load(weights_file,map_location=device))
+            print('权重文件为：', weights_file)
+            print(key, '容器预测模型参数载入完成')
+        else:
+            print('该模型权重文件不存在')
+        # 训练集输出
+        train_mean_loss , train_output_normalized = predict(np.array(train_sequence_normalized).reshape(1, -1).tolist(), train_window, model, batch_size=1)
+        train_output = scaler.inverse_transform(np.array(train_output_normalized).reshape(-1, 1)).reshape(-1).tolist()
+        print('train_mean_loss = ', train_mean_loss)
+        # 验证集输出
+        val_mean_loss, val_output_normalized = predict(np.array(val_sequence_normalized).reshape(1, -1).tolist(), train_window, model, batch_size=1)
+        val_output = scaler.inverse_transform(np.array(val_output_normalized).reshape(-1, 1)).reshape(-1).tolist()
+        print('val_mean_loss = ', val_mean_loss)
+########将输入输出的序列写入CSV文件，查看冲击是否能对应上
+        after_50_train_sequence = train_sequence[50:]
+        # 确保两个列表长度相同
+        assert len(after_50_train_sequence) == len(train_output), "Length of train_sequence and train_output does not match"
+        csv_url = os.path.dirname(os.path.realpath(__file__)) + '/csv_directory/'+ f'{dataset_name}/'+ key + '/'+'cycle/' + f'tw={train_window}_{epoch_vision}' + '/'
+        if not os.path.exists(csv_url):
+            os.makedirs(csv_url)
+        csv_filename = csv_url + f'train_in_out.csv'
+        # 将数据写入CSV文件
+        with open(csv_filename, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            # 写入标题行
+            writer.writerow(['序号', 'train_input', 'train_output'])
+            # 逐行写入数据
+            for i, (seq, out) in enumerate(zip(after_50_train_sequence, train_output), start=1):
+                writer.writerow([i, seq, out])
+
+
+
+    #     output_figure_url = os.path.dirname(os.path.realpath(__file__)) + '/test_lstm_output_figure/' + f'{dataset_name}/'+ key + '/' + epoch_vision + '/'
+    #     if not os.path.exists(output_figure_url):
+    #         os.makedirs(output_figure_url)
+        
+    #     output_sequence_dict = {
+    #         'train_output':train_output,
+    #         'train_output_normalized':train_output_normalized,
+    #         'val_output':val_output,
+    #         'val_output_normalized':val_output_normalized
+    #         }
+    #     input_sequence_dict = {
+    #     'train_sequence': train_sequence,
+    #     'train_sequence_normalized': train_sequence_normalized,
+    #     'val_sequence': val_sequence,
+    #     'val_sequence_normalized': val_sequence_normalized
+    #     }
+
+    #     for (output_sequence_name, output_sequence_value), (input_sequence_name, input_sequence_value) in zip(output_sequence_dict.items(), input_sequence_dict.items()):
+    #         input_sequence_value = input_sequence_value[50:]
+    #         output_figure_path = output_figure_url + f'{output_sequence_name}/'
+    #         if not os.path.exists(output_figure_path):
+    #             os.makedirs(output_figure_path)
+    #         # 预测的时间间隔图像，100个数据一个图形
+    #         num_plots = len(output_sequence_value)
+    #         num_plots_per_figure = 100
+    #         for i in range(0, num_plots, num_plots_per_figure):
+    #             start_index = i
+    #             end_index = min(i + num_plots_per_figure, len(output_sequence_value))
+    #             # limit_ymin = 29500
+    #             # limit_ymax = 30500
+    #             fig = plt.figure(figsize=(15, 10))
+    #             plt.plot(range(start_index, end_index), output_sequence_value[start_index:end_index], label='output sequence', color='red')
+    #             plt.plot(range(start_index, end_index), input_sequence_value[start_index:end_index], label='input sequence', color='blue')
+    #             # plt.ylim(ymin=limit_ymin, ymax=limit_ymax)  # 限制y轴范围
+    #             plt.legend()
+    #             plt.xlabel('Arrival order')
+    #             plt.ylabel(f'{output_sequence_name} time interval')
+    #             plt.title(key + f'{output_sequence_name} time interval sequence (Plots {i+1}-{i+num_plots_per_figure})')
+    #             fig.savefig(output_figure_path + f"{output_sequence_name}_time_interval_{i+1}-{i+num_plots_per_figure}.png")
+    #             plt.close()
+    # print("输出图形绘制完成")
+##########################################################################
 
     # # 训练模型并保存模型
     # print(key, '容器预测模型开始训练')
     # training(epochs, train_inout_seq, val_inout_seq, model,optimizer,batch_size,model_url)
+
+
+
 
     # # 加载模型
     # weights_file = model_url + epoch_vision + '/model_weights.pth'
     # if os.path.exists(weights_file):
     #     model = model.to(device)
     #     model.load_state_dict(torch.load(weights_file,map_location=device))
+    #     print('权重文件为：', weights_file)
     #     print(key, '容器预测模型参数载入完成')
     # else:
     #     print('该模型权重文件不存在')
@@ -286,16 +451,31 @@ if __name__ == "__main__":
     # # 预测
     # mean_loss, diff_predictions = predict(test_input, train_window, model, batch_size=1)
     # print('mean_loss = ', mean_loss)
-
     # # 归一化值转换为实际时间间隔值
     # diff_predictions = scaler.inverse_transform(np.array(diff_predictions).reshape(-1, 1)).reshape(-1).tolist()
-    # # 实际时间间隔值应该>=0(这里把间隔值小于初始化时间的设置为初始化时间，意味着立即预热)
-    # diff_predictions = [ele if ele >= init_time else init_time for ele in diff_predictions]
+    # # 实际时间间隔值应该>=0，<0的间隔值修正为0
+    # diff_predictions = [ele if ele >= 0 else 0 for ele in diff_predictions]
+    
+    # # 预测误差
+    # error = []
+    # error_list = []
+    # mean=0
+    # error_list = [y - x for x, y in zip(test_sequence,diff_predictions)]
+    # mean = sum(abs(x) for x in error_list)/len(error_list)
+    # error.append(mean)
+    # error.append(error_list)
+    # # print('error = [mean, error_list]')
+    # print('error =', error[0])
+    
     # # 根据实际时间间隔值，计算实际预测到达时刻
-    # last_arrival_time=sequence[-len(diff_predictions)-1:-2]
+    # last_arrival_time=sequence[-len(diff_predictions)-1:-1]
     # predictions = [x + y for x, y in zip(last_arrival_time, diff_predictions)]
     # # 真实的到达时刻
     # actual_value = sequence[-len(predictions):]
+
+    # sequence_error_list = [y - x for x, y in zip(actual_value,predictions)]
+    # squence_mean_error = sum(abs(x) for x in sequence_error_list)/len(sequence_error_list)
+    # print('squence_mean_error =', squence_mean_error)
 
     # print("预测完成")
 
@@ -326,22 +506,26 @@ if __name__ == "__main__":
     # fig.savefig(figure_url + key + "_predicted_diff_sequence.png")
     # plt.close()
 
-    # 预测的时间间隔图像，500个数据一个图形
+    # # 预测的时间间隔图像，500个数据一个图形
     # predict_figure_url = os.path.dirname(os.path.realpath(__file__))+'/predict_figure/' +dataset_name+'/' +key+'/' +f'tw={train_window}_' + epoch_vision +'/' 
     # if not os.path.exists(predict_figure_url):
     #     os.makedirs(predict_figure_url)
 
     # num_plots = len(diff_predictions)
-    # num_plots_per_figure = 500
+    # num_plots_per_figure = 100
 
     # for i in range(0, num_plots, num_plots_per_figure):
     #     start_index = i
     #     end_index = min(i + num_plots_per_figure, len(diff_predictions))
-        
+    #     limit_ymin = 29500
+    #     limit_ymax = 30500
     #     fig = plt.figure(figsize=(15, 10))
     #     plt.plot(range(start_index, end_index), diff_sequence[start_index:end_index], label='actual arrival time interval', color='blue')
     #     plt.plot(range(start_index, end_index), diff_predictions[start_index:end_index], label='predicted arrival time interval', color='red')
     #     plt.legend()
+    #     # plt.ylim(ymin=max(limit_ymin,min(diff_predictions[start_index:end_index])), ymax=max(max(diff_predictions[start_index:end_index]),max(diff_sequence[start_index:end_index])))  # 限制y轴范围
+    #     plt.ylim(ymin=limit_ymin, ymax=limit_ymax)  # 限制y轴范围
+
     #     plt.xlabel('Arrival order')
     #     plt.ylabel('arrival time interval(ms)')
     #     plt.title(key + f'Container arrival time interval sequence (Plots {i+1}-{i+num_plots_per_figure})')
@@ -354,7 +538,7 @@ if __name__ == "__main__":
     #     os.makedirs(predict_sequence_figure_url)
 
     # num_plots = len(predictions)
-    # num_plots_per_figure = 500
+    # num_plots_per_figure = 50
 
     # for i in range(0, num_plots, num_plots_per_figure):
     #     start_index = i
@@ -370,16 +554,7 @@ if __name__ == "__main__":
     #     fig.savefig(predict_sequence_figure_url + key + f"_predicted_sequence_{i+1}-{i+num_plots_per_figure}.png")
     #     plt.close()
 
-    # # 预测误差
-    # error = []
-    # error_list = []
-    # mean=0
-    # error_list = [y - x for x, y in zip(actual_value,predictions)]
-    # mean = sum(abs(x) for x in error_list)/len(error_list)
-    # error.append(mean)
-    # error.append(error_list)
-    # # print('error = [mean, error_list]')
-    # print('error =', error[0])
+
 
     # # 记录数据 cold_start_predict,waste_time,exe_time
     # cold_start_predict={}
@@ -393,17 +568,21 @@ if __name__ == "__main__":
 
     # time_sequence = time_sequences[key]
     # actual_time_sequence = time_sequence[-len(predictions):]
+    # # 预热开始的时间
+    # warm_start_times = [last_arrival_time[i] if predictions[i] - last_arrival_time[i] <init_time else predictions[i] - init_time for i in range(len(predictions))]
+
     # i = 0
     # j = 0
     # while i < len(actual_time_sequence):
     #     ele_real = actual_time_sequence[i]
-    #     ele_predict = predictions[j]
+    #     warm_start_time = warm_start_times[j]
+        
     #     # 判断是否 非热启动
-    #     if ele_real[0] < ele_predict - advance_time:  # 非热启动
+    #     if ele_real[0] < warm_start_time + init_time:  # 非热启动
     #         # 判断是否正在预热
-    #         if ele_predict - advance_time - init_time < ele_real[0]:
-    #             cold_start_predict[key].append([ele_real[0],ele_predict - advance_time - ele_real[0]])
-    #             exe_time[key].append([init_time + ele_real[1], ele_predict - advance_time -ele_real[0] + ele_real[1]])
+    #         if warm_start_time < ele_real[0]: # 正在预热
+    #             cold_start_predict[key].append([ele_real[0], warm_start_time + init_time - ele_real[0]])
+    #             exe_time[key].append([init_time + ele_real[1], warm_start_time + init_time - ele_real[0] + ele_real[1]])
     #             # waste_time[key].append()
     #             i = i + 1
     #             j = j + 1
@@ -416,16 +595,19 @@ if __name__ == "__main__":
     #             j = j + 1
     #     else:  # 热启动
     #         # cold_start_predict[key]
-    #         exe_time[key].append([ele_real[0] - ele_predict + advance_time + init_time + ele_real[1], ele_real[1]])
-    #         waste_time[key].append(ele_real[0] - ele_predict + advance_time)
+    #         exe_time[key].append([ele_real[0] - warm_start_time + ele_real[1], ele_real[1]])
+    #         waste_time[key].append(ele_real[0] - warm_start_time - init_time)
     #         i = i + 1
     #         j = j + 1
 
     # # 统计指标 cold_statistics,mem_statistics
     # cold_statistics = statistics.cold_start_statistics_predict(cold_start_predict, exe_time, metas)
-    # mem_statistics = statistics.memory_statistics_predict(waste_time, exe_time, metas)
+    # mem_statistics = statistics.memory_statistics_predict(waste_time, cold_start_predict,exe_time, metas)
 
-    # print('cold_statistics[key]=[cold_num,all_num,cold_frequency,cold_time,utilization]')
+    # print('cold_statistics[key]=[cold_num, all_num, frequency, cold_time, all_time, utilization, cold_time_every_req]')
     # print(cold_statistics)
-    # print('mem_statistics[key]=[waste_mem,all_mem,utilization]')
+    # print('mem_statistics[key]=[waste_mem_every_req, waste_mem, req_exe_mem_every_req, req_exe_mem, all_mem, utilization]')
     # print(mem_statistics)
+
+
+

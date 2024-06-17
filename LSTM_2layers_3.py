@@ -1,7 +1,10 @@
 #!/usr/bin/env python
 # -*- coding:utf-8 -*-
 
-'''基于diff的代码，调整网络结构，增加模型复杂度，两层LSTM堆叠，128隐藏层单元，两个全连接层，降低偏差，减小loss至1e-5'''
+'''
+毕设没用到
+
+基于diff的代码，调整网络结构，增加模型复杂度，两层LSTM堆叠，128隐藏层单元，两个全连接层，降低偏差，减小loss至1e-5'''
 
 import torch
 import torch.nn as nn

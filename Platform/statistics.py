@@ -65,7 +65,10 @@ def cold_start_statistics(cold_start,exe_time,metas):
             utilization = 0
         else:
             utilization=1-cold_num*init_time/all_time
-        cold_time_every_req = cold_num*init_time/all_num
+        if all_num == 0:
+            cold_time_every_req = 0
+        else:
+            cold_time_every_req = cold_num*init_time/all_num
         cold_statistics[key]=[cold_num,all_num,frequency,cold_num*init_time,utilization,cold_time_every_req]
 
         all_all_time=all_all_time+all_time
@@ -152,9 +155,13 @@ def memory_statistics(waste_time,cold_start,exe_time,metas):
         req_exe_time = req_use_time - cold_time     # request exe time = request use time - cold time
 
         waste_mem=waste*key_memory
-        waste_mem_every_req = waste_mem/all_num
         req_exe_mem = req_exe_time*key_memory
-        req_exe_mem_every_req = req_exe_mem/all_num
+        if all_num == 0:
+            waste_mem_every_req = 0
+            req_exe_mem_every_req = 0
+        else:
+            waste_mem_every_req = waste_mem/all_num
+            req_exe_mem_every_req = req_exe_mem/all_num
 
         all_mem = all_time*key_memory
 
